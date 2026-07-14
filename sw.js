@@ -8,6 +8,7 @@ const ASSETS = [
   'js/app.js',
   'js/store.js',
   'js/keypad.js',
+  'js/board.js',
   'js/games/base.js',
   'js/games/x01.js',
   'js/games/cricket.js',

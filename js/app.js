@@ -1,5 +1,6 @@
 import * as store from './store.js';
 import { createKeypad } from './keypad.js';
+import { createBoardInput } from './board.js';
 import * as x01 from './games/x01.js';
 import * as cricket from './games/cricket.js';
 import * as killer from './games/killer.js';
@@ -16,6 +17,7 @@ let tab = 'home';
 let selectedGameId = 'x01';
 let randomOrder = true;
 let showRules = false;   // rules box open on home screen
+let inputMode = localStorage.getItem('pila.input') || 'keypad'; // 'keypad' | 'board'
 const optState = {};        // { gameId: { key: value } }
 for (const g of GAMES) {
   optState[g.meta.id] = {};
@@ -256,7 +258,7 @@ function renderPlay() {
   match.render(boardHost);
   wrap.appendChild(boardHost);
 
-  const kp = createKeypad({
+  const handlers = {
     onDart: d => step(() => match.dart(d)),
     onMiss: () => step(() => match.miss()),
     onUndo: () => step(() => match.undo()),
@@ -268,8 +270,16 @@ function renderPlay() {
       while (match.s.turn.length > 0 && match.s.turn.length < 3 && !match.finished && guard++ < 3) match.miss();
       if (match.s.turn.length === 0 && !match.finished) { while (match.s.turn.length < 3 && !match.finished) match.miss(); }
     }),
-  });
-  wrap.appendChild(kp);
+    onToggle: () => {
+      inputMode = inputMode === 'board' ? 'keypad' : 'board';
+      localStorage.setItem('pila.input', inputMode);
+      renderPlay();
+    },
+  };
+  const input = inputMode === 'board'
+    ? createBoardInput({ turnLen: match.s.turn.length, ...handlers })
+    : createKeypad(handlers);
+  wrap.appendChild(input);
 
   app.appendChild(wrap);
 }

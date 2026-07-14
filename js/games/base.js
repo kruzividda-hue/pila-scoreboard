@@ -8,9 +8,9 @@ export function dartPoints(d) {
 export function dartLabel(d) {
   if (!d) return '';
   if (d.num === 0) return '–';
+  if (d.num === 25) return d.ring === 2 ? 'Bull' : '25'; // 50 = Bull, 25 = outer
   const pre = d.ring === 2 ? 'D' : d.ring === 3 ? 'T' : '';
-  const n = d.num === 25 ? 'Bull' : d.num;
-  return pre + n;
+  return pre + d.num;
 }
 
 // Base gives snapshot-based undo. Subclasses keep all mutable data in this.s.
