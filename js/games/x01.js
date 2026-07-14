@@ -39,7 +39,8 @@ export class Game extends GameBase {
   title() { return 'X01'; }
   subtitle() {
     const o = this.opts;
-    return `${o.start} · ${o.outMode === 'Tvöfalt' ? 'Double Out' : 'Straight Out'} · Fyrstur í ${o.sets} sett ${o.legs} legg`;
+    const leggir = o.legs === 1 ? 'legg' : 'leggi';
+    return `${o.start} · ${o.outMode === 'Tvöfalt' ? 'Double Out' : 'Straight Out'} · Fyrstur í ${o.sets} sett, ${o.legs} ${leggir}`;
   }
   status() {
     const p = this.playerById(this.cur);
@@ -55,9 +56,9 @@ export class Game extends GameBase {
     if (this.opts.outMode !== 'Tvöfalt') return '';
     if (rem > 170 || rem === 169 || rem === 168 || rem === 166 || rem === 165 ||
         rem === 163 || rem === 162 || rem === 159) return '';
-    if (rem <= 40 && rem % 2 === 0) return `checkout: D${rem / 2}`;
-    if (rem === 50) return 'checkout: Bull';
-    return 'checkout mögulegt';
+    if (rem <= 40 && rem % 2 === 0) return `út á D${rem / 2}`;
+    if (rem === 50) return 'út á Bull';
+    return 'hægt að klára';
   }
 
   dart(d) {

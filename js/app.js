@@ -49,9 +49,9 @@ function render() {
 function renderTabbar() {
   const bar = el('<div class="tabbar"></div>');
   const tabs = [
-    ['home', '🎯', 'Leikur'],
+    ['home', '🎯', 'Heim'],
     ['players', '👥', 'Leikmenn'],
-    ['history', '🕑', 'Leikir'],
+    ['history', '🕑', 'Saga'],
   ];
   for (const [id, ic, label] of tabs) {
     const b = el(`<button class="${tab === id ? 'active' : ''}"><span class="ic">${ic}</span>${label}</button>`);
@@ -67,20 +67,23 @@ function renderHome() {
   wrap.appendChild(el(`<div class="hdr"><h1>Píla 🎯</h1></div>`));
   const content = el('<div class="content"></div>');
 
-  // game picker cards
+  // game picker: compact 2-column grid
   const cards = el('<div class="game-cards"></div>');
   for (const g of GAMES) {
     const c = el(`<div class="gc ${g.meta.id === selectedGameId ? 'sel' : ''}">
         <div class="emoji">${g.meta.emoji}</div>
-        <div><div class="gc-t">${g.meta.name}</div><div class="gc-d">${g.meta.tagline}</div></div>
+        <div class="gc-t">${g.meta.name}</div>
       </div>`);
     c.onclick = () => { selectedGameId = g.meta.id; render(); };
     cards.appendChild(c);
   }
   content.appendChild(cards);
 
-  // options for selected game
+  // tagline of the selected game
   const g = GAMES.find(x => x.meta.id === selectedGameId);
+  content.appendChild(el(`<div class="blurb">${g.meta.emoji} ${g.meta.tagline}</div>`));
+
+  // options for selected game
   if (g.meta.options.length) {
     const grid = el('<div class="opt-grid"></div>');
     for (const o of g.meta.options) grid.appendChild(renderOption(g.meta.id, o));
@@ -169,7 +172,7 @@ function renderPlayersTab() {
 // ---------------- HISTORY ----------------
 function renderHistory() {
   const wrap = el('<div></div>');
-  const hdr = el(`<div class="hdr"><h1>Leikir 🕑</h1><button class="hdr-btn" title="Hreinsa">🗑</button></div>`);
+  const hdr = el(`<div class="hdr"><h1>Leikjasaga 🕑</h1><button class="hdr-btn" title="Hreinsa">🗑</button></div>`);
   hdr.querySelector('button').onclick = () => {
     if (confirm('Eyða allri leikjasögu?')) { store.clearHistory(); render(); }
   };

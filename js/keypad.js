@@ -13,7 +13,7 @@ export function createKeypad({ onDart, onMiss, onUndo, onNext }) {
       <button class="trp" data-m="3">ÞREFALT</button>
     </div>
     <div class="kp-grid" id="kpNums"></div>
-    <div class="kp-hint" id="kpHint">Veldu tölu — pikkaðu TVÖFALT/ÞREFALT fyrst fyrir margfeldi</div>
+    <div class="kp-hint" id="kpHint">Pikkaðu TVÖFALT eða ÞREFALT á undan tölunni</div>
   `;
 
   const grid = el.querySelector('#kpNums');
@@ -23,8 +23,8 @@ export function createKeypad({ onDart, onMiss, onUndo, onNext }) {
   for (let n = 1; n <= 20; n++) addBtn(String(n), () => fire(n));
   addBtn('Bull', () => fire(25), 'bull');
   addBtn('0', () => onMiss(), 'miss');
-  addBtn('Núlla', () => { onUndo(); resetMult(); }, 'wide undo');
-  addBtn('Klára ✓', () => { onNext(); resetMult(); }, 'wide next');
+  addBtn('⟲ Aftur', () => { onUndo(); resetMult(); }, 'wide3 undo');
+  addBtn('Klára ✓', () => { onNext(); resetMult(); }, 'wide3 next');
 
   function addBtn(label, fn, cls = '') {
     const b = document.createElement('button');
@@ -50,7 +50,7 @@ export function createKeypad({ onDart, onMiss, onUndo, onNext }) {
     el.querySelector('.trp').classList.toggle('on', mult === 3);
     hint.textContent = mult === 2 ? 'TVÖFALT valið — veldu tölu'
       : mult === 3 ? 'ÞREFALT valið — veldu tölu'
-      : 'Veldu tölu — pikkaðu TVÖFALT/ÞREFALT fyrst fyrir margfeldi';
+      : 'Pikkaðu TVÖFALT eða ÞREFALT á undan tölunni';
   }
 
   el.querySelectorAll('.mult-row button').forEach(b => {

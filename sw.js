@@ -1,6 +1,6 @@
 // Offline-capable cache for the Píla PWA. Network-first for code/markup so
 // updates load whenever online; cache-first for icons.
-const CACHE = 'pila-v2';
+const CACHE = 'pila-v3';
 const ASSETS = [
   './',
   'index.html',
@@ -36,9 +36,10 @@ self.addEventListener('fetch', e => {
     /\.(js|css|webmanifest)$/.test(url.pathname);
 
   if (codeLike) {
-    // network-first: always try to fetch fresh, fall back to cache offline
+    // network-first: always revalidate with the server (bypass HTTP cache),
+    // fall back to SW cache when offline
     e.respondWith(
-      fetch(e.request).then(res => {
+      fetch(e.request, { cache: 'no-cache' }).then(res => {
         const copy = res.clone();
         caches.open(CACHE).then(c => c.put(e.request, copy)).catch(() => {});
         return res;

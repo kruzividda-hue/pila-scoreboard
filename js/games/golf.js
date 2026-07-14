@@ -4,7 +4,7 @@ export const meta = {
   id: 'golf',
   name: 'Golf',
   emoji: '⛳',
-  tagline: 'Hola 1–9 — lægst skor vinnur (eins og golf)',
+  tagline: 'Hola 1–9 — lægsta skorið vinnur',
   minPlayers: 1, maxPlayers: 8,
   options: [
     { key: 'holes', label: 'Holur', type: 'cycle', values: [9, 18], def: 9 },
@@ -31,10 +31,10 @@ export class Game extends GameBase {
   }
   get cur() { return this.s.order[this.s.turnIndex]; }
   title() { return 'Golf ⛳'; }
-  subtitle() { return `${this.opts.holes} holur · lægst skor vinnur`; }
+  subtitle() { return `${this.opts.holes} holur · lægsta skorið vinnur`; }
   status() {
     const p = this.playerById(this.cur);
-    return { text: `Hola <b>${this.s.hole}</b> — <b>${p.name}</b> (skýtur á ${this.s.hole})`, color: p.color };
+    return { text: `Hola <b>${this.s.hole}</b> — <b>${p.name}</b> kastar á <b>${this.s.hole}</b>`, color: p.color };
   }
 
   dart(d) {
@@ -81,7 +81,7 @@ export class Game extends GameBase {
         big: st.total,
         name: p.name,
         meta: [`${played} holur spilaðar`],
-        right: active ? `skýtur á ${this.s.hole}` : '',
+        right: active ? `kastar á ${this.s.hole}` : '',
       });
       if (active) card.appendChild(turnDarts(this.s.turn));
       board.appendChild(card);

@@ -26,7 +26,7 @@ export class Game extends GameBase {
   subtitle() { return `${this.opts.rounds} umferðir · Shanghai (S+D+T) vinnur strax`; }
   status() {
     const p = this.playerById(this.cur);
-    return { text: `Umferð <b>${this.s.round}</b> — <b>${p.name}</b> skýtur á <b>${this.s.round}</b>`, color: p.color };
+    return { text: `Umferð <b>${this.s.round}</b> — <b>${p.name}</b> kastar á <b>${this.s.round}</b>`, color: p.color };
   }
 
   dart(d) {
@@ -73,7 +73,7 @@ export class Game extends GameBase {
         color: p.color, active,
         big: st.score,
         name: p.name,
-        meta: active ? [`skýtur á ${this.s.round}`] : [],
+        meta: active ? [`kastar á ${this.s.round}`] : [],
         right: '',
       });
       if (active) card.appendChild(turnDarts(this.s.turn));

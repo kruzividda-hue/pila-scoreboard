@@ -4,7 +4,7 @@ export const meta = {
   id: 'killer',
   name: 'Killer',
   emoji: '💀',
-  tagline: 'Verðu killer og slá andstæðinga út',
+  tagline: 'Verðu killer og sláðu andstæðinga út',
   minPlayers: 2, maxPlayers: 8,
   options: [
     { key: 'lives', label: 'Líf', type: 'stepper', min: 1, max: 9, def: 3 },
@@ -30,7 +30,7 @@ export class Game extends GameBase {
   status() {
     const p = this.playerById(this.cur);
     const st = this.s.p[this.cur];
-    const hint = st.killer ? 'þú ert KILLER — hittu tvöfalt andstæðinga' : `hittu TVÖFALT ${st.number} til að verða killer`;
+    const hint = st.killer ? 'þú ert KILLER — hittu tvöfalt á tölur andstæðinga' : `hittu TVÖFALT ${st.number} til að verða killer`;
     return { text: `<b>${p.name}</b> — ${hint}`, color: p.color };
   }
 

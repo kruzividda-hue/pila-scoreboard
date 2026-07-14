@@ -4,7 +4,7 @@ export const meta = {
   id: 'clock',
   name: 'Around the Clock',
   emoji: '🕐',
-  tagline: 'Hittu 1, 2, 3 … 20 og bull í röð',
+  tagline: 'Hittu 1, 2, 3 … 20 og Bull í röð',
   minPlayers: 1, maxPlayers: 8,
   options: [
     { key: 'fast', label: 'D/T flýtir', type: 'cycle', values: ['Af', 'Á'], def: 'Af' },

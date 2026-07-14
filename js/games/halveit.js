@@ -40,7 +40,7 @@ export class Game extends GameBase {
   get cur() { return this.s.order[this.s.turnIndex]; }
   get target() { return TARGETS[this.s.round]; }
   title() { return 'Halve It ➗'; }
-  subtitle() { return `${TARGETS.length} umferðir · klikkir þú helmingast stigin`; }
+  subtitle() { return `${TARGETS.length} umferðir · ef þú klikkar helmingast stigin`; }
   status() {
     const p = this.playerById(this.cur);
     return { text: `Mark: <b>${targetLabel(this.target)}</b> — <b>${p.name}</b>`, color: p.color };

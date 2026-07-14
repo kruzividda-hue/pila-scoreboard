@@ -6,7 +6,7 @@ export const meta = {
   id: 'cricket',
   name: 'Cricket',
   emoji: '🦗',
-  tagline: 'Lokaðu 15–20 og bull',
+  tagline: 'Lokaðu 15–20 og Bull',
   minPlayers: 1, maxPlayers: 6,
   options: [
     { key: 'points', label: 'Stig', type: 'cycle', values: ['Á', 'Af'], def: 'Á' },

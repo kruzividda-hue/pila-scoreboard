@@ -147,6 +147,7 @@ body{
 }
 .kp-grid button:active{background:var(--green-light)}
 .kp-grid button.wide{grid-column:span 2}
+.kp-grid button.wide3{grid-column:span 3}
 .kp-grid button.miss{background:#94a3b8;color:#fff}
 .kp-grid button.undo{background:var(--red);color:#fff}
 .kp-grid button.next{background:var(--green);color:#fff}
@@ -180,12 +181,11 @@ body{
 .tabbar button .ic{font-size:22px}
 .tabbar button.active{color:var(--green)}
 
-.game-cards{display:grid;gap:12px}
-.gc{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;display:flex;gap:14px;align-items:center;cursor:pointer;border:2px solid transparent}
-.gc.sel{border-color:var(--green)}
-.gc .emoji{font-size:32px}
-.gc .gc-t{font-weight:800;font-size:17px}
-.gc .gc-d{color:var(--muted);font-size:13px;margin-top:2px}
+.game-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.gc{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 14px;display:flex;gap:10px;align-items:center;cursor:pointer;border:2px solid transparent}
+.gc.sel{border-color:var(--green);background:var(--green-light)}
+.gc .emoji{font-size:24px}
+.gc .gc-t{font-weight:800;font-size:15px}
 
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(210px + var(--safe-bottom));background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:700;z-index:60;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.show{opacity:.95}
