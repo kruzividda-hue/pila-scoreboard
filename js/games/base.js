@@ -42,7 +42,8 @@ export class GameBase {
 }
 
 // Renders a standard player card. `cfg` fields:
-//  big (main number), name, meta (array of strings), right (html), active(bool), out(bool)
+//  big (main number), name, meta (array of strings), right (html),
+//  foot (html, full-width line at the bottom), active(bool), out(bool)
 export function playerCard(cfg) {
   const el = document.createElement('div');
   el.className = 'pcard' + (cfg.active ? ' active' : '') + (cfg.out ? ' out' : '');
@@ -53,7 +54,8 @@ export function playerCard(cfg) {
       <div class="nm">${cfg.name}</div>
       <div class="meta">${(cfg.meta || []).map(m => `<span>${m}</span>`).join('')}</div>
     </div>
-    <div class="rt">${cfg.right || ''}</div>`;
+    <div class="rt">${cfg.right || ''}</div>
+    ${cfg.foot ? `<div class="pfoot">${cfg.foot}</div>` : ''}`;
   return el;
 }
 

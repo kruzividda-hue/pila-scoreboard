@@ -1,5 +1,44 @@
 import { GameBase, dartPoints, dartLabel, playerCard, turnDarts } from './base.js';
 
+// ---- checkout route suggestion ----
+// Candidate setup darts, in preference order (high triples first, then
+// bull/25, singles, doubles, low triples).
+const SETUPS = [];
+for (let n = 20; n >= 13; n--) SETUPS.push({ pts: n * 3, label: 'T' + n });
+SETUPS.push({ pts: 50, label: 'Bull' }, { pts: 25, label: '25' });
+for (let n = 20; n >= 1; n--) SETUPS.push({ pts: n, label: String(n) });
+for (let n = 20; n >= 1; n--) SETUPS.push({ pts: n * 2, label: 'D' + n });
+for (let n = 12; n >= 1; n--) SETUPS.push({ pts: n * 3, label: 'T' + n });
+
+// A single dart that finishes `rem`, or null.
+function finisher(rem, doubleOut) {
+  if (doubleOut) {
+    if (rem === 50) return 'Bull';
+    if (rem >= 2 && rem <= 40 && rem % 2 === 0) return 'D' + rem / 2;
+    return null;
+  }
+  if (rem >= 1 && rem <= 20) return String(rem);
+  if (rem === 25 || rem === 50) return rem === 25 ? '25' : 'Bull';
+  if (rem <= 40 && rem % 2 === 0) return 'D' + rem / 2;
+  if (rem <= 60 && rem % 3 === 0) return 'T' + rem / 3;
+  return null;
+}
+
+// Shortest route (as dart labels) to finish `rem` with `dartsLeft` darts.
+export function routeFor(rem, dartsLeft, doubleOut) {
+  if (dartsLeft <= 0 || rem <= 0) return null;
+  const f = finisher(rem, doubleOut);
+  if (f) return [f];
+  if (dartsLeft === 1) return null;
+  const min = doubleOut ? 2 : 1; // never leave less than this
+  for (const t of SETUPS) {
+    if (rem - t.pts < min) continue;
+    const rest = routeFor(rem - t.pts, dartsLeft - 1, doubleOut);
+    if (rest) return [t.label, ...rest];
+  }
+  return null;
+}
+
 export const meta = {
   id: 'x01',
   name: 'X01',
@@ -30,6 +69,7 @@ export class Game extends GameBase {
         rem: opts.start, opened: opts.inMode === 'Beint',
         legs: 0, sets: 0, dartsThrown: 0, pointsScored: 0,
         legStartRem: opts.start,
+        lastTurn: null, // { darts:[labels], sum, bust }
       };
     }
   }
@@ -53,12 +93,11 @@ export class Game extends GameBase {
   }
 
   _checkoutHint(rem) {
-    if (this.opts.outMode !== 'Tvöfalt') return '';
-    if (rem > 170 || rem === 169 || rem === 168 || rem === 166 || rem === 165 ||
-        rem === 163 || rem === 162 || rem === 159) return '';
-    if (rem <= 40 && rem % 2 === 0) return `út á D${rem / 2}`;
-    if (rem === 50) return 'út á Bull';
-    return 'hægt að klára';
+    const st = this.s.p[this.cur];
+    if (!st.opened) return '';
+    const dartsLeft = 3 - this.s.turn.length;
+    const route = routeFor(rem, dartsLeft, this.opts.outMode === 'Tvöfalt');
+    return route ? `út: <b>${route.join(' → ')}</b>` : '';
   }
 
   dart(d) {
@@ -115,15 +154,25 @@ export class Game extends GameBase {
   }
 
   _endTurn(wasBust) {
+    const st = this.s.p[this.cur];
+    st.lastTurn = {
+      darts: this.s.turn.map(t => dartLabel(t)),
+      sum: wasBust ? 0 : this._turnScoredSoFar(),
+      bust: wasBust,
+    };
     // move to next player
     this.s.turn = [];
-    const st = this.s.p[this.cur];
     st.legStartRem = st.rem;
     this.s.turnIndex = (this.s.turnIndex + 1) % this.s.order.length;
   }
 
   _winLeg(pid) {
     const st = this.s.p[pid];
+    st.lastTurn = {
+      darts: this.s.turn.map(t => dartLabel(t)),
+      sum: this._turnScoredSoFar(),
+      bust: false,
+    };
     st.legs++;
     this.s.turn = [];
     if (st.legs >= this.opts.legs) {
@@ -138,6 +187,7 @@ export class Game extends GameBase {
       s.rem = this.opts.start;
       s.legStartRem = this.opts.start;
       s.opened = this.opts.inMode === 'Beint';
+      s.lastTurn = null; // don't show last leg's turn in the new one
     }
     this.s.startLeg = (this.s.startLeg + 1) % this.s.order.length;
     this.s.turnIndex = this.s.startLeg;
@@ -151,11 +201,18 @@ export class Game extends GameBase {
       const st = this.s.p[id];
       const active = id === this.cur && !this.finished;
       const avg = st.dartsThrown ? (st.pointsScored / st.dartsThrown * 3).toFixed(1) : '0.0';
+      const lt = st.lastTurn;
+      const foot = lt
+        ? (lt.bust
+          ? `Síðast: <span style="color:var(--red);font-weight:800">búst</span> (${lt.darts.join(' ')})`
+          : `Síðast: <b style="color:var(--ink)">${lt.sum}</b> (${lt.darts.join(' ')})`)
+        : '';
       const card = playerCard({
         color: p.color, active,
         big: st.rem,
         name: p.name,
         meta: [],
+        foot,
         right: `Sett: <b>${st.sets}</b> · Legg: <b>${st.legs}</b><br>🎯 ${st.dartsThrown} · Ø ${avg}`,
       });
       if (active) card.appendChild(turnDarts(this.s.turn));
