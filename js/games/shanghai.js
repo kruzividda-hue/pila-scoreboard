@@ -5,6 +5,10 @@ export const meta = {
   name: 'Shanghai',
   emoji: '🀄',
   tagline: 'Umferð fyrir hverja tölu — S+D+T = sjálfvirkur sigur',
+  rules: `Í umferð 1 kasta allir á töluna 1, í umferð 2 á töluna 2, og svo framvegis. Aðeins pílur sem hitta tölu umferðarinnar gefa stig: einfalt = talan, tvöfalt = ×2, þrefalt = ×3.
+
+• SHANGHAI: hittir þú einfalt + tvöfalt + þrefalt á töluna í SÖMU umferðinni vinnurðu leikinn samstundis — sama hver staðan er!
+• Annars vinnur sá stigahæsti þegar öllum umferðum er lokið.`,
   minPlayers: 1, maxPlayers: 8,
   options: [
     { key: 'rounds', label: 'Umferðir', type: 'stepper', min: 5, max: 20, def: 7 },

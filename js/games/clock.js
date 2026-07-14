@@ -5,6 +5,11 @@ export const meta = {
   name: 'Around the Clock',
   emoji: '🕐',
   tagline: 'Hittu 1, 2, 3 … 20 og Bull í röð',
+  rules: `Hittu tölurnar í réttri röð: fyrst 1, svo 2, 3 … alla leið upp í 20 og endaðu á Bull. Spjaldið þitt sýnir alltaf hvaða tölu þú átt að hitta næst.
+
+• Þú færð 3 pílur í hverri umferð og færist bara áfram þegar þú hittir réttu töluna — hringirnir skipta ekki máli.
+• Fyrstur til að klára Bull vinnur.
+• D/T flýtir (valkvætt): tvöfalt högg færir þig 2 skref áfram og þrefalt 3 — þá borgar sig að tefla djarft!`,
   minPlayers: 1, maxPlayers: 8,
   options: [
     { key: 'fast', label: 'D/T flýtir', type: 'cycle', values: ['Af', 'Á'], def: 'Af' },

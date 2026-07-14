@@ -7,6 +7,11 @@ export const meta = {
   name: 'Cricket',
   emoji: '🦗',
   tagline: 'Lokaðu 15–20 og Bull',
+  rules: `Markmiðið er að LOKA tölunum 15–20 og Bull. Það þarf þrjú högg til að loka tölu: einfalt = 1 högg, tvöfalt = 2, þrefalt = 3. Taflan sýnir / (1 högg), X (2) og ⊗ (lokað).
+
+• Með stigum: þegar ÞÚ hefur lokað tölu gefa auka högg á hana þér stig — þar til allir hafa lokað henni.
+• Sigur: loka öllum tölum og vera með flest stig.
+• Cut Throat: öfugt — auka höggin setja stig á andstæðingana og sá stigaLÆGSTI vinnur. Refsileikur!`,
   minPlayers: 1, maxPlayers: 6,
   options: [
     { key: 'points', label: 'Stig', type: 'cycle', values: ['Á', 'Af'], def: 'Á' },

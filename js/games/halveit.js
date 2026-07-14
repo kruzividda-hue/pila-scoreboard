@@ -5,6 +5,11 @@ export const meta = {
   name: 'Halve It',
   emoji: '➗',
   tagline: 'Hittu markið — annars helmingast stigin þín!',
+  rules: `Hver umferð hefur sitt mark, í þessari röð: 15, 16, 17, TVÖFALT (hvaða tvöfalt sem er), 18, 19, 20, ÞREFALT (hvaða þrefalt sem er) og Bull.
+
+• Aðeins pílur sem hitta mark umferðarinnar gefa stig.
+• Hittir þú EKKERT af þremur pílum umferðarinnar HELMINGAST stigin þín! Þess vegna borgar sig stundum að spila öruggt.
+• Sá stigahæsti eftir síðustu umferð (Bull) vinnur.`,
   minPlayers: 1, maxPlayers: 8,
   options: [],
 };

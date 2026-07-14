@@ -5,6 +5,13 @@ export const meta = {
   name: 'Killer',
   emoji: '💀',
   tagline: 'Verðu killer og sláðu andstæðinga út',
+  rules: `Hver leikmaður fær tölu af handahófi (sést á spjaldinu hans) og byrjar með jafn mörg líf.
+
+1. Hittu TVÖFALT á þína eigin tölu til að verða killer (🔪).
+2. Sem killer: hittu TVÖFALT á tölur andstæðinganna — hvert högg tekur af þeim eitt líf ❤️.
+3. Missir þú öll líf ertu úti ☠️. Síðasti leikmaðurinn á lífi vinnur.
+
+Taktík: á meðan þú ert að reyna að verða killer geta hinir killerarnir tekið af þér líf — stundum borgar sig að liggja lágt!`,
   minPlayers: 2, maxPlayers: 8,
   options: [
     { key: 'lives', label: 'Líf', type: 'stepper', min: 1, max: 9, def: 3 },

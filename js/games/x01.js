@@ -44,6 +44,11 @@ export const meta = {
   name: 'X01',
   emoji: '🎯',
   tagline: '301 / 501 / 701 — klassíkin',
+  rules: `Allir byrja með 301, 501 eða 701 stig og það sem þú hittir dregst frá. Markmiðið er að enda NÁKVÆMLEGA í 0 — fyrstur þangað vinnur legginn.
+
+• Tvöfalt út: síðasta pílan þarf að lenda í tvöfalda hringnum (t.d. D16 þegar 32 eru eftir).
+• Búst: ferðu niður fyrir 0 (eða skilurðu eftir 1 í tvöfalt út) ógildist öll umferðin og staðan verður eins og hún var.
+• Appið stingur upp á útgönguleið efst á skjánum þegar hægt er að klára.`,
   minPlayers: 1, maxPlayers: 8,
   options: [
     { key: 'start', label: 'Byrjun', type: 'cycle', values: [301, 501, 701], def: 501 },

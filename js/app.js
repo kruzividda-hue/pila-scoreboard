@@ -15,6 +15,7 @@ const app = document.getElementById('app');
 let tab = 'home';
 let selectedGameId = 'x01';
 let randomOrder = true;
+let showRules = false;   // rules box open on home screen
 const optState = {};        // { gameId: { key: value } }
 for (const g of GAMES) {
   optState[g.meta.id] = {};
@@ -74,14 +75,20 @@ function renderHome() {
         <div class="emoji">${g.meta.emoji}</div>
         <div class="gc-t">${g.meta.name}</div>
       </div>`);
-    c.onclick = () => { selectedGameId = g.meta.id; render(); };
+    c.onclick = () => { selectedGameId = g.meta.id; showRules = false; render(); };
     cards.appendChild(c);
   }
   content.appendChild(cards);
 
-  // tagline of the selected game
+  // tagline + rules of the selected game
   const g = GAMES.find(x => x.meta.id === selectedGameId);
   content.appendChild(el(`<div class="blurb">${g.meta.emoji} ${g.meta.tagline}</div>`));
+  if (g.meta.rules) {
+    const tgl = el(`<button class="rules-toggle">${showRules ? '▲ Fela leikreglur' : 'ℹ️ Leikreglur — hvernig spilast leikurinn?'}</button>`);
+    tgl.onclick = () => { showRules = !showRules; render(); };
+    content.appendChild(tgl);
+    if (showRules) content.appendChild(el(`<div class="rules-box">${g.meta.rules}</div>`));
+  }
 
   // options for selected game
   if (g.meta.options.length) {
@@ -205,11 +212,25 @@ function startMatch() {
   if (players.length > g.meta.maxPlayers) players = players.slice(0, g.meta.maxPlayers);
   if (randomOrder) players = players.map(p => p).sort(() => Math.random() - 0.5);
   match = new g.Game(players, optState[g.meta.id]);
+  match.meta = g.meta;
   render();
 }
 
 function quitMatch() {
   if (confirm('Hætta í leik? Framvinda tapast.')) { match = null; render(); }
+}
+
+function showRulesOverlay() {
+  const m = match.meta;
+  const overlay = el(`<div class="overlay">
+      <div class="win-card" style="text-align:left;max-height:80vh;overflow-y:auto">
+        <h2 style="text-align:center">${m.emoji} ${m.name}</h2>
+        <div class="rules-box" style="box-shadow:none;padding:0;margin:12px 0 18px">${m.rules}</div>
+        <button class="btn btn-green">Loka</button>
+      </div></div>`);
+  overlay.querySelector('.btn').onclick = () => document.body.removeChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) document.body.removeChild(overlay); });
+  document.body.appendChild(overlay);
 }
 
 // ---------------- PLAY ----------------
@@ -218,10 +239,13 @@ function renderPlay() {
   const wrap = el('<div style="display:flex;flex-direction:column;min-height:100vh"></div>');
 
   const hdr = el(`<div class="hdr">
-      <button class="hdr-btn">‹</button>
+      <button class="hdr-btn" data-act="back">‹</button>
       <div style="flex:1"><h1 style="font-size:22px">${match.title()}</h1>
-      <div class="sub">${match.subtitle()}</div></div></div>`);
-  hdr.querySelector('button').onclick = quitMatch;
+      <div class="sub">${match.subtitle()}</div></div>
+      ${match.meta?.rules ? '<button class="hdr-btn" data-act="rules">?</button>' : ''}</div>`);
+  hdr.querySelector('[data-act="back"]').onclick = quitMatch;
+  const rulesBtn = hdr.querySelector('[data-act="rules"]');
+  if (rulesBtn) rulesBtn.onclick = showRulesOverlay;
   wrap.appendChild(hdr);
 
   const st = match.status();
@@ -238,6 +262,8 @@ function renderPlay() {
     onUndo: () => step(() => match.undo()),
     onNext: () => step(() => {
       if (match.finished) return;
+      // games may define their own end-of-turn action (e.g. Golf banks the last dart)
+      if (typeof match.next === 'function') { match.next(); return; }
       let guard = 0;
       while (match.s.turn.length > 0 && match.s.turn.length < 3 && !match.finished && guard++ < 3) match.miss();
       if (match.s.turn.length === 0 && !match.finished) { while (match.s.turn.length < 3 && !match.finished) match.miss(); }
