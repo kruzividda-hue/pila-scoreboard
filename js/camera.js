@@ -32,6 +32,8 @@ let session = {
   mode: 'camera', // camera | calibrate | score
   aiCalibration: null,
   aiIgnored: [],
+  aiTracks: [],
+  aiFrame: 0,
   aiBusy: false,
   aiTimer: null,
   aiGeneration: 0,
@@ -107,6 +109,8 @@ function clearPhoto() {
   session.darts = [];
   session.aiCalibration = null;
   session.aiIgnored = [];
+  session.aiTracks = [];
+  session.aiFrame = 0;
   session.mode = 'camera';
 }
 
@@ -132,7 +136,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
   const video = root.querySelector('video');
   const canvas = root.querySelector('canvas');
   const aiCanvas = document.createElement('canvas');
-  aiCanvas.width = aiCanvas.height = 512;
+  aiCanvas.width = aiCanvas.height = 800;
   const stage = root.querySelector('.cam-stage');
   const markerLayer = root.querySelector('.cam-markers');
   const message = root.querySelector('.cam-message');
@@ -150,7 +154,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     try {
       stopStream();
       session.image = null; session.darts = []; session.calPoints = [];
-      session.aiCalibration = null; session.aiIgnored = []; session.mode = 'camera';
+      session.aiCalibration = null; session.aiIgnored = []; session.aiTracks = [];
+      session.aiFrame = 0; session.mode = 'camera';
       session.stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
@@ -167,7 +172,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     }
   }
 
-  function videoSquare(target, size = 512) {
+  function videoSquare(target, size = 800) {
     const crop = Math.min(video.videoWidth, video.videoHeight);
     const sx = (video.videoWidth - crop) / 2;
     const sy = (video.videoHeight - crop) / 2;
@@ -179,7 +184,21 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
   function addAIDart(det, calibration) {
     try {
       const result = calibratedScore(calibration, 1, 1, det.x, det.y);
+      // An automatic miss is much more likely to be a bad calibration than a
+      // useful result. Misses remain easy to enter manually.
+      if (result.dart.num === 0 || det.confidence < 0.32) return;
       if (session.aiIgnored.some(p => Math.hypot(p.x - result.boardX, p.y - result.boardY) < 8)) return;
+      let track = session.aiTracks.find(p =>
+        Math.hypot(p.boardX - result.boardX, p.boardY - result.boardY) < 8);
+      if (!track) {
+        track = { ...det, ...result, hits: 0, lastFrame: -1 };
+        session.aiTracks.push(track);
+      }
+      if (track.lastFrame !== session.aiFrame) track.hits++;
+      Object.assign(track, det, result, { lastFrame: session.aiFrame });
+      // Ignore one-frame flashes. A real dart remains in the same canonical
+      // board position even when the phone moves slightly.
+      if (track.hits < 2) return;
       const near = session.darts.find(p => p.boardX != null
         && Math.hypot(p.boardX - result.boardX, p.boardY - result.boardY) < 7);
       if (near) {
@@ -201,6 +220,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
         message.innerHTML = `<b>AI hleðst…</b> ${Math.round(progress * 100)}%`;
       });
       if (generation !== session.aiGeneration) return;
+      session.aiFrame++;
       const byClass = cls => detections.filter(d => d.cls === cls)
         .sort((a, b) => b.confidence - a.confidence)[0];
       // DeepDarts classes are top, bottom, left, right. calibratedScore expects
@@ -209,9 +229,11 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       if (cal.every(Boolean)) {
         session.aiCalibration = cal.map(p => ({ x: p.x, y: p.y }));
         detections.filter(d => d.cls === 0)
+          .filter(d => !cal.some(p => Math.hypot(p.x - d.x, p.y - d.y) < 0.055))
           .sort((a, b) => b.confidence - a.confidence)
           .slice(0, 3).forEach(d => addAIDart(d, session.aiCalibration));
       }
+      session.aiTracks = session.aiTracks.filter(t => session.aiFrame - t.lastFrame <= 4 || t.hits >= 2);
       draw();
     } catch (err) {
       message.textContent = 'AI náði ekki að greina rammann — reyndu að halda spjaldinu öllu inni.';
@@ -370,7 +392,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     actions.querySelector('[data-act="open"]')?.addEventListener('click', startCamera);
     actions.querySelector('[data-act="capture"]')?.addEventListener('click', takePhoto);
     actions.querySelector('[data-act="reset-ai"]')?.addEventListener('click', () => {
-      session.darts = []; session.aiCalibration = null; session.aiIgnored = []; draw();
+      session.darts = []; session.aiCalibration = null; session.aiIgnored = [];
+      session.aiTracks = []; session.aiFrame = 0; draw();
     });
     actions.querySelector('[data-act="retake"]')?.addEventListener('click', startCamera);
     actions.querySelector('[data-act="undo-cal"]')?.addEventListener('click', () => { session.calPoints.pop(); draw(); });

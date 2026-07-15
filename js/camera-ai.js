@@ -1,8 +1,8 @@
 // DeepDarts browser inference. The model and every frame stay on the device.
-const MODEL_URL = new URL('../models/deepdarts-d2/model.json', import.meta.url).href;
+const MODEL_URL = `${new URL('../models/deepdarts-d2/model.json', import.meta.url).href}?v=800-1`;
 const TF_URL = new URL('../vendor/tf.min.js', import.meta.url).href;
-const INPUT_SIZE = 512;
-const SCORE_THRESHOLD = 0.22;
+const INPUT_SIZE = 800;
+const SCORE_THRESHOLD = 0.18;
 const IOU_THRESHOLD = 0.30;
 
 let modelPromise;

@@ -6,7 +6,7 @@
   const result = document.querySelector('#result');
   try {
     const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = 512;
+    canvas.width = canvas.height = 800;
     const detections = await detectDarts(canvas);
     result.textContent = `ok ${detections.length} detections on blank frame`;
   } catch (error) {

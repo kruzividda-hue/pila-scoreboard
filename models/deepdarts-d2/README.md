@@ -1,7 +1,7 @@
 # DeepDarts D2 browser model
 
 This is the published DeepDarts D2 TensorFlow checkpoint converted to a
-512×512 TensorFlow.js graph model with float16 weights. It detects dart tips
+800×800 TensorFlow.js graph model with float16 weights. It detects dart tips
 and four dartboard calibration keypoints. Inference runs on the user's device.
 
 Source dataset and checkpoint: William McNally, “DeepDarts Dataset”, IEEE
