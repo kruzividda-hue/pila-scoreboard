@@ -1,5 +1,6 @@
 // Persistent storage for players and match history.
 const PLAYERS_KEY = 'pila.players';
+const SELECTED_KEY = 'pila.selected';
 const HISTORY_KEY = 'pila.history';
 
 export const COLORS = [
@@ -20,7 +21,20 @@ let _players = read(PLAYERS_KEY, [
   { id: 'p2', name: 'Hákon' },
 ]);
 
+// which roster players take part in the next game, in selection order
+let _selected = read(SELECTED_KEY, null) ?? _players.map(p => p.id);
+
 export function getPlayers() { return _players.slice(); }
+
+// selected players in the order they were selected (determines colors/turn order)
+export function getSelectedPlayers() {
+  return _selected.map(id => _players.find(p => p.id === id)).filter(Boolean);
+}
+export function isSelected(id) { return _selected.includes(id); }
+export function toggleSelected(id) {
+  _selected = _selected.includes(id) ? _selected.filter(x => x !== id) : [..._selected, id];
+  write(SELECTED_KEY, _selected);
+}
 
 export function addPlayer(name) {
   const id = 'p' + Date.now().toString(36) + Math.floor(Math.random() * 1000);
@@ -30,6 +44,8 @@ export function addPlayer(name) {
 export function removePlayer(id) {
   _players = _players.filter(p => p.id !== id);
   write(PLAYERS_KEY, _players);
+  _selected = _selected.filter(x => x !== id);
+  write(SELECTED_KEY, _selected);
 }
 export function colorFor(index) { return COLORS[index % COLORS.length]; }
 
