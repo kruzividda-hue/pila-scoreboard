@@ -71,7 +71,7 @@ function boardSVG(markers) {
 // markers survive re-renders within a turn, clear when a new turn starts
 let markers = [];
 
-export function createBoardInput({ turnLen, onDart, onMiss, onUndo, onNext, onToggle }) {
+export function createBoardInput({ turnLen, onDart, onMiss, onUndo, onNext, onToggle, onCamera }) {
   if (turnLen === 0) markers = [];
   const el = document.createElement('div');
   el.className = 'boardpad';
@@ -79,6 +79,7 @@ export function createBoardInput({ turnLen, onDart, onMiss, onUndo, onNext, onTo
     <div class="board-wrap">${boardSVG(markers)}</div>
     <div class="bp-row">
       <button class="toggle" title="Talnaborð">⌨️</button>
+      ${onCamera ? '<button class="toggle camera" title="Myndavél">📷</button>' : ''}
       <button class="miss">0</button>
       <button class="undo">⟲ Aftur</button>
       <button class="next">Klára ✓</button>
@@ -101,5 +102,6 @@ export function createBoardInput({ turnLen, onDart, onMiss, onUndo, onNext, onTo
   el.querySelector('.undo').onclick = () => { markers.pop(); onUndo(); };
   el.querySelector('.next').onclick = () => onNext();
   el.querySelector('.toggle').onclick = () => onToggle();
+  if (onCamera) el.querySelector('.camera').onclick = () => onCamera();
   return el;
 }

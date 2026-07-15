@@ -111,9 +111,9 @@ body{
 
 /* ---------- Game screen ---------- */
 .play-screen{height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-.play-screen .hdr,.play-screen .game-status,.play-screen .keypad,.play-screen .boardpad{flex:none}
+.play-screen .hdr,.play-screen .game-status,.play-screen .keypad,.play-screen .boardpad,.play-screen .camerapad{flex:none}
 .play-screen .play-content{min-height:0;overflow-y:auto;padding:6px 16px 14px;overscroll-behavior:contain;overflow-anchor:none}
-.play-screen .keypad,.play-screen .boardpad{position:relative;left:auto;right:auto;bottom:auto;width:100%}
+.play-screen .keypad,.play-screen .boardpad,.play-screen .camerapad{position:relative;left:auto;right:auto;bottom:auto;width:100%}
 .game-status{text-align:center;padding:10px 16px;font-size:15px;font-weight:700;color:var(--muted);min-height:20px}
 .game-status b{color:var(--ink)}
 .scoreboard{padding:8px 12px 4px;display:flex;flex-direction:column;gap:10px}
@@ -182,6 +182,37 @@ body{
 .bp-row .miss{flex:0 0 52px;background:#94a3b8;color:#fff}
 .bp-row .undo{flex:1;background:var(--red);color:#fff}
 .bp-row .next{flex:1;background:var(--green);color:#fff}
+
+/* ---------- Camera + calibrated photo input ---------- */
+.camerapad{background:var(--line);padding:7px 7px calc(7px + var(--safe-bottom));z-index:15}
+.cam-message{text-align:center;min-height:28px;font-size:13px;font-weight:700;color:var(--muted);padding:3px 6px 7px}
+.cam-message b{color:var(--ink)}
+.cam-stage{
+  --cam-ratio:1.3333;position:relative;overflow:hidden;margin:0 auto;
+  width:min(100%,calc(43dvh * var(--cam-ratio)));max-height:43dvh;
+  aspect-ratio:var(--cam-ratio);border-radius:14px;background:#111827;
+  box-shadow:var(--shadow);touch-action:manipulation;cursor:crosshair;
+}
+.cam-stage video,.cam-stage canvas{width:100%;height:100%;display:none;object-fit:fill}
+.cam-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;font-size:40px;text-align:center}
+.cam-empty span{font-size:14px;margin-top:6px;color:#cbd5e1;font-weight:700}
+.cam-markers{position:absolute;inset:0;pointer-events:none}
+.cam-marker{
+  position:absolute;transform:translate(-50%,-50%);background:#fbbf24;color:#111827;
+  border:2px solid #78350f;border-radius:999px;min-width:30px;height:30px;padding:0 5px;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;
+  box-shadow:0 2px 8px rgba(0,0,0,.5);
+}
+.cam-marker.cal{background:#38bdf8;border-color:#075985;color:#082f49}
+.cam-chips{display:flex;gap:6px;justify-content:center;min-height:37px;padding:6px 0 2px}
+.cam-chips button{border:none;border-radius:9px;background:var(--card);color:var(--ink);padding:7px 10px;font-weight:800;box-shadow:var(--shadow)}
+.cam-actions{display:flex;gap:6px}
+.cam-actions button,.cam-modes button{border:none;border-radius:10px;background:var(--card);color:var(--ink);padding:12px 10px;font-size:14px;font-weight:800;box-shadow:var(--shadow);flex:1}
+.cam-actions button.cam-primary{background:var(--green);color:#fff;flex:1.5}
+.cam-actions button:disabled{opacity:.45}
+.cam-modes{display:flex;align-items:center;gap:6px;margin-top:6px}
+.cam-modes button{flex:0 0 52px;font-size:18px;padding:10px}
+.cam-modes span{flex:1;text-align:right;color:var(--muted);font-size:11px;font-weight:600;padding-right:4px}
 
 /* ---------- Win overlay ---------- */
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:50;padding:24px}

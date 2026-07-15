@@ -37,6 +37,7 @@ js/app.js             aðalstýring: heimaskjár, flipar, leikjaskjár
 js/store.js           leikmenn + saga (localStorage)
 js/keypad.js          sameiginlegt talnaborð (skilar pílum {num,ring})
 js/board.js           pikka-á-spjald innsláttur (SVG-spjald → {num,ring})
+js/camera.js          myndataka, 4 punkta kvörðun og pikk á ljósmynd
 js/games/base.js      sameiginlegt: undo (snapshot), spilaraspjöld
 js/games/*.js         einn leikur hver (x01, cricket, killer, clock, shanghai, golf, halveit)
 manifest.webmanifest  PWA
@@ -50,15 +51,19 @@ og `class Game extends GameBase` með aðferðunum: `title() subtitle() status()
 render(root) historyEntry()` og eiginleikunum `finished` / `winnerId`. Skráðu hann svo í `GAMES` fylkið í `js/app.js`.
 
 ## Innsláttur
-Tveir hamir, skiptanlegt með 🎯/⌨️ hnappnum í leik (valið vistast):
+Þrír hamir, skiptanlegir með 🎯/⌨️/📷 hnöppunum í leik (valið vistast):
 - **Talnaborð**: tala + TVÖFALT/ÞREFALT á undan fyrir margfeldi.
 - **Pikka á spjald** (`js/board.js`): teiknað SVG-píluspjald; pikkaðu þar sem pílan lenti og
   stigin reiknast sjálf. Merki sýna pílur umferðarinnar. Hringirnir eru örlítið breiðari en á
   alvöru spjaldi svo þrefalt/tvöfalt sé þægilegt að hitta á símaskjá.
+- **Mynd + pikk** (`js/camera.js`): taktu mynd, kvarðaðu einu sinni með D20/D6/D3/D11 og pikkaðu
+  á allt að þrjár pílur. Fjögurra punkta homography leiðréttir skáhorn myndarinnar. Hægt er að
+  fjarlægja hvert gildi og pikka aftur áður en allt kastið er staðfest. Kvörðun geymist aðeins í
+  `localStorage`; myndin helst í minni og er hvorki send né vistuð í leikjasögu.
 
 ## AI-vegvísir (áfangar)
 1. ✅ **Pikka á spjald** — sama staðfestingar-UI og AI mun nota (`scoreAt(x,y)` er hrein fall).
-2. ⬜ **Mynd + pikk**: myndavél sýnir spjaldið, notandi kvarðar (4 punktar) og pikkar á ljósmyndina;
+2. ✅ **Mynd + pikk**: myndavél sýnir spjaldið, notandi kvarðar (4 punktar) og pikkar á ljósmyndina;
    vörpun (homography) reiknar stigin.
 3. ⬜ **Full AI**: DeepDarts-gerð módel (ONNX Runtime Web) finnur pílur + kvörðunarpunkta í mynd;
    forfyllir umferðina og notandi staðfestir/lagar. Einnar myndavélar nákvæmni er ~85–95% svo

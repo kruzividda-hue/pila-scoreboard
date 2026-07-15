@@ -2,7 +2,7 @@
 // ring is 1 (single), 2 (double) or 3 (triple). num 0..20 or 25 (bull).
 // Also emits miss (0), undo and "next" (end turn early).
 
-export function createKeypad({ onDart, onMiss, onUndo, onNext, onToggle }) {
+export function createKeypad({ onDart, onMiss, onUndo, onNext, onToggle, onCamera }) {
   const el = document.createElement('div');
   el.className = 'keypad';
   let mult = 1; // pending multiplier applied to the next number press
@@ -12,11 +12,13 @@ export function createKeypad({ onDart, onMiss, onUndo, onNext, onToggle }) {
       ${onToggle ? '<button class="kp-toggle" data-m="0" title="Pikka á spjald">🎯</button>' : ''}
       <button class="dbl" data-m="2">TVÖFALT</button>
       <button class="trp" data-m="3">ÞREFALT</button>
+      ${onCamera ? '<button class="kp-toggle" data-camera title="Myndavél">📷</button>' : ''}
     </div>
     <div class="kp-grid" id="kpNums"></div>
     <div class="kp-hint" id="kpHint">Pikkaðu TVÖFALT eða ÞREFALT á undan tölunni</div>
   `;
   if (onToggle) el.querySelector('.kp-toggle').onclick = () => onToggle();
+  if (onCamera) el.querySelector('[data-camera]').onclick = () => onCamera();
 
   const grid = el.querySelector('#kpNums');
   const hint = el.querySelector('#kpHint');

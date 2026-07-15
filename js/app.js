@@ -1,6 +1,7 @@
 import * as store from './store.js';
 import { createKeypad } from './keypad.js';
 import { createBoardInput } from './board.js';
+import { createCameraInput, closeCamera } from './camera.js';
 import * as x01 from './games/x01.js';
 import * as cricket from './games/cricket.js';
 import * as killer from './games/killer.js';
@@ -17,7 +18,7 @@ let tab = 'home';
 let selectedGameId = 'x01';
 let randomOrder = true;
 let showRules = false;   // rules box open on home screen
-let inputMode = localStorage.getItem('pila.input') || 'keypad'; // 'keypad' | 'board'
+let inputMode = localStorage.getItem('pila.input') || 'keypad'; // keypad | board | camera
 const optState = {};        // { gameId: { key: value } }
 for (const g of GAMES) {
   optState[g.meta.id] = {};
@@ -248,7 +249,7 @@ function startMatch() {
 }
 
 function quitMatch() {
-  if (confirm('Hætta í leik? Framvinda tapast.')) { match = null; render(); }
+  if (confirm('Hætta í leik? Framvinda tapast.')) { closeCamera(); match = null; render(); }
 }
 
 function showRulesOverlay() {
@@ -287,27 +288,45 @@ function renderPlay() {
   match.render(boardHost);
   wrap.appendChild(boardHost);
 
+  const finishCurrentTurn = () => {
+    if (match.finished) return;
+    // games may define their own end-of-turn action (e.g. Golf banks the last dart)
+    if (typeof match.next === 'function') { match.next(); return; }
+    let guard = 0;
+    while (match.s.turn.length > 0 && match.s.turn.length < 3 && !match.finished && guard++ < 3) match.miss();
+    if (match.s.turn.length === 0 && !match.finished) {
+      while (match.s.turn.length < 3 && !match.finished) match.miss();
+    }
+  };
+  const setInput = mode => {
+    if (mode !== 'camera') closeCamera();
+    inputMode = mode;
+    localStorage.setItem('pila.input', inputMode);
+    renderPlay();
+  };
   const handlers = {
     onDart: d => step(() => match.dart(d)),
     onMiss: () => step(() => match.miss()),
     onUndo: () => step(() => match.undo()),
-    onNext: () => step(() => {
-      if (match.finished) return;
-      // games may define their own end-of-turn action (e.g. Golf banks the last dart)
-      if (typeof match.next === 'function') { match.next(); return; }
-      let guard = 0;
-      while (match.s.turn.length > 0 && match.s.turn.length < 3 && !match.finished && guard++ < 3) match.miss();
-      if (match.s.turn.length === 0 && !match.finished) { while (match.s.turn.length < 3 && !match.finished) match.miss(); }
+    onNext: () => step(finishCurrentTurn),
+    onTurn: darts => step(() => {
+      const player = match.cur;
+      for (const d of darts) {
+        if (match.finished || match.cur !== player) break;
+        if (d.num === 0) match.miss(); else match.dart(d);
+      }
+      if (!match.finished && match.cur === player) finishCurrentTurn();
     }),
-    onToggle: () => {
-      inputMode = inputMode === 'board' ? 'keypad' : 'board';
-      localStorage.setItem('pila.input', inputMode);
-      renderPlay();
-    },
+    onToggle: () => setInput(inputMode === 'board' ? 'keypad' : 'board'),
+    onCamera: () => setInput('camera'),
+    onKeypad: () => setInput('keypad'),
+    onBoard: () => setInput('board'),
   };
-  const input = inputMode === 'board'
-    ? createBoardInput({ turnLen: match.s.turn.length, ...handlers })
-    : createKeypad(handlers);
+  const input = inputMode === 'camera'
+    ? createCameraInput(handlers)
+    : inputMode === 'board'
+      ? createBoardInput({ turnLen: match.s.turn.length, ...handlers })
+      : createKeypad(handlers);
   wrap.appendChild(input);
 
   app.appendChild(wrap);
