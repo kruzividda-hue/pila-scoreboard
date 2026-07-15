@@ -57,7 +57,8 @@ render(root) historyEntry()` og eiginleikunum `finished` / `winnerId`. Skráðu 
   stigin reiknast sjálf. Merki sýna pílur umferðarinnar. Hringirnir eru örlítið breiðari en á
   alvöru spjaldi svo þrefalt/tvöfalt sé þægilegt að hitta á símaskjá.
 - **Mynd + pikk** (`js/camera.js`): taktu mynd, kvarðaðu einu sinni með D20/D6/D3/D11 og pikkaðu
-  á allt að þrjár pílur. Fjögurra punkta homography leiðréttir skáhorn myndarinnar. Hægt er að
+  á allt að þrjár pílur. Myndin er miðjuskorin í stóran ferning svo spjaldið nýtir símaskjáinn.
+  Fjögurra punkta homography leiðréttir skáhorn myndarinnar. Hægt er að
   fjarlægja hvert gildi og pikka aftur áður en allt kastið er staðfest. Kvörðun geymist aðeins í
   `localStorage`; myndin helst í minni og er hvorki send né vistuð í leikjasögu.
 

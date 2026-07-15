@@ -138,9 +138,6 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       });
       video.srcObject = session.stream;
       await video.play();
-      if (video.videoWidth && video.videoHeight) {
-        stage.style.setProperty('--cam-ratio', String(video.videoWidth / video.videoHeight));
-      }
       draw();
     } catch (err) {
       const denied = err?.name === 'NotAllowedError';
@@ -152,12 +149,14 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
 
   function takePhoto() {
     if (!video.videoWidth) return;
-    const maxW = 1280;
-    const scale = Math.min(1, maxW / video.videoWidth);
-    session.width = Math.round(video.videoWidth * scale);
-    session.height = Math.round(video.videoHeight * scale);
+    // A dartboard is round: crop the centre of the camera frame to a square.
+    // This keeps the board large enough for accurate taps on a portrait phone.
+    const crop = Math.min(video.videoWidth, video.videoHeight);
+    const sx = (video.videoWidth - crop) / 2;
+    const sy = (video.videoHeight - crop) / 2;
+    session.width = session.height = Math.min(1280, crop);
     canvas.width = session.width; canvas.height = session.height;
-    canvas.getContext('2d').drawImage(video, 0, 0, session.width, session.height);
+    canvas.getContext('2d').drawImage(video, sx, sy, crop, crop, 0, 0, session.width, session.height);
     session.image = canvas.toDataURL('image/jpeg', .86);
     stopStream();
     session.darts = []; session.calPoints = [];
@@ -190,14 +189,10 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       session.calPoints.push(p);
       if (session.calPoints.length === 4) {
         session.calibration = session.calPoints.map(q => ({ x: q.x / session.width, y: q.y / session.height }));
-        try {
-          homographyFrom4(session.calPoints);
-          localStorage.setItem(CAL_KEY, JSON.stringify(session.calibration));
-          session.mode = 'score';
-        } catch {
-          session.calPoints = [];
-          message.textContent = 'Kvörðunin tókst ekki — reyndu punktana fjóra aftur.';
-        }
+        // The four named points already provide the required quadrilateral.
+        // Save immediately; projection is validated when a dart is tapped.
+        localStorage.setItem(CAL_KEY, JSON.stringify(session.calibration));
+        session.mode = 'score';
       }
     } else if (session.mode === 'score' && session.darts.length < 3) {
       try {
@@ -217,9 +212,6 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
 
   function draw() {
     const live = !!session.stream;
-    if (session.width && session.height) {
-      stage.style.setProperty('--cam-ratio', String(session.width / session.height));
-    }
     video.style.display = live ? 'block' : 'none';
     canvas.style.display = session.image ? 'block' : 'none';
     root.querySelector('.cam-empty').style.display = (!live && !session.image) ? 'flex' : 'none';
