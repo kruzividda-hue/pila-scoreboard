@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>DeepDarts smoke test</title>
+<pre id="result">loading</pre>
+<script src="../vendor/tf.min.js"></script>
+<script type="module">
+  import { detectDarts } from '../js/camera-ai.js';
+  const result = document.querySelector('#result');
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 512;
+    const detections = await detectDarts(canvas);
+    result.textContent = `ok ${detections.length} detections on blank frame`;
+  } catch (error) {
+    result.textContent = `error ${error.stack || error}`;
+  }
+</script>

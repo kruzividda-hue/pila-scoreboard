@@ -2,6 +2,7 @@
 // Photos and tap markers stay in memory only. Calibration is stored locally.
 import { scoreAt } from './board.js';
 import { dartLabel } from './games/base.js';
+import { detectDarts, loadDartModel } from './camera-ai.js';
 
 const CAL_KEY = 'pila.cameraCalibration.v1';
 const TARGET_R = 94.5; // middle of the double ring in board.js coordinates
@@ -29,6 +30,11 @@ let session = {
   calPoints: [],
   darts: [],
   mode: 'camera', // camera | calibrate | score
+  aiCalibration: null,
+  aiIgnored: [],
+  aiBusy: false,
+  aiTimer: null,
+  aiGeneration: 0,
 };
 
 // Solve A*x=b with partial pivoting. Used by the 4-point homography.
@@ -78,8 +84,16 @@ export function calibratedScore(calibration, width, height, x, y) {
 }
 
 function stopStream() {
+  stopAI();
   if (session.stream) session.stream.getTracks().forEach(track => track.stop());
   session.stream = null;
+}
+
+function stopAI() {
+  session.aiGeneration++;
+  clearTimeout(session.aiTimer);
+  session.aiTimer = null;
+  session.aiBusy = false;
 }
 
 export function closeCamera() { stopStream(); }
@@ -91,6 +105,8 @@ function clearPhoto() {
   session.height = 0;
   session.calPoints = [];
   session.darts = [];
+  session.aiCalibration = null;
+  session.aiIgnored = [];
   session.mode = 'camera';
 }
 
@@ -110,11 +126,13 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     <div class="cam-modes">
       <button data-mode="keypad" title="Talnaborð">⌨️</button>
       <button data-mode="board" title="Teiknað spjald">🎯</button>
-      <span>Myndir fara ekki úr símanum</span>
+      <span>AI keyrir í símanum · myndir fara ekki út</span>
     </div>`;
 
   const video = root.querySelector('video');
   const canvas = root.querySelector('canvas');
+  const aiCanvas = document.createElement('canvas');
+  aiCanvas.width = aiCanvas.height = 512;
   const stage = root.querySelector('.cam-stage');
   const markerLayer = root.querySelector('.cam-markers');
   const message = root.querySelector('.cam-message');
@@ -131,7 +149,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     }
     try {
       stopStream();
-      session.image = null; session.darts = []; session.calPoints = []; session.mode = 'camera';
+      session.image = null; session.darts = []; session.calPoints = [];
+      session.aiCalibration = null; session.aiIgnored = []; session.mode = 'camera';
       session.stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
@@ -139,12 +158,83 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       video.srcObject = session.stream;
       await video.play();
       draw();
+      startAI();
     } catch (err) {
       const denied = err?.name === 'NotAllowedError';
       message.textContent = denied
         ? 'Myndavélarleyfi vantar. Leyfðu myndavél í stillingum Safari og reyndu aftur.'
         : 'Ekki tókst að opna myndavélina.';
     }
+  }
+
+  function videoSquare(target, size = 512) {
+    const crop = Math.min(video.videoWidth, video.videoHeight);
+    const sx = (video.videoWidth - crop) / 2;
+    const sy = (video.videoHeight - crop) / 2;
+    target.width = target.height = size;
+    target.getContext('2d', { willReadFrequently: true })
+      .drawImage(video, sx, sy, crop, crop, 0, 0, size, size);
+  }
+
+  function addAIDart(det, calibration) {
+    try {
+      const result = calibratedScore(calibration, 1, 1, det.x, det.y);
+      if (session.aiIgnored.some(p => Math.hypot(p.x - result.boardX, p.y - result.boardY) < 8)) return;
+      const near = session.darts.find(p => p.boardX != null
+        && Math.hypot(p.boardX - result.boardX, p.boardY - result.boardY) < 7);
+      if (near) {
+        if ((det.confidence || 0) >= (near.confidence || 0)) {
+          Object.assign(near, det, result, { normalized: true, source: 'ai' });
+        }
+      } else if (session.darts.length < 3) {
+        session.darts.push({ ...det, ...result, normalized: true, source: 'ai' });
+      }
+    } catch { /* wait for a stronger calibration frame */ }
+  }
+
+  async function scanFrame(generation) {
+    if (!session.stream || generation !== session.aiGeneration || session.aiBusy || !video.videoWidth) return;
+    session.aiBusy = true;
+    try {
+      videoSquare(aiCanvas);
+      const detections = await detectDarts(aiCanvas, progress => {
+        message.innerHTML = `<b>AI hleðst…</b> ${Math.round(progress * 100)}%`;
+      });
+      if (generation !== session.aiGeneration) return;
+      const byClass = cls => detections.filter(d => d.cls === cls)
+        .sort((a, b) => b.confidence - a.confidence)[0];
+      // DeepDarts classes are top, bottom, left, right. calibratedScore expects
+      // top, right, bottom, left.
+      const cal = [byClass(1), byClass(4), byClass(2), byClass(3)];
+      if (cal.every(Boolean)) {
+        session.aiCalibration = cal.map(p => ({ x: p.x, y: p.y }));
+        detections.filter(d => d.cls === 0)
+          .sort((a, b) => b.confidence - a.confidence)
+          .slice(0, 3).forEach(d => addAIDart(d, session.aiCalibration));
+      }
+      draw();
+    } catch (err) {
+      message.textContent = 'AI náði ekki að greina rammann — reyndu að halda spjaldinu öllu inni.';
+      console.warn('DeepDarts inference failed', err);
+    } finally {
+      session.aiBusy = false;
+      if (session.stream && generation === session.aiGeneration) {
+        session.aiTimer = setTimeout(() => scanFrame(generation), 500);
+      }
+    }
+  }
+
+  function startAI() {
+    stopAI();
+    const generation = session.aiGeneration;
+    message.innerHTML = '<b>AI hleðst…</b> fyrsta skiptið getur tekið smástund';
+    loadDartModel(progress => {
+      if (generation === session.aiGeneration) {
+        message.innerHTML = `<b>AI hleðst…</b> ${Math.round(progress * 100)}%`;
+      }
+    }).then(() => scanFrame(generation)).catch(() => {
+      message.textContent = 'Ekki tókst að hlaða AI-líkaninu.';
+    });
   }
 
   function takePhoto() {
@@ -176,6 +266,10 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
 
   function imagePoint(e) {
     const rect = stage.getBoundingClientRect();
+    if (!session.image) return {
+      x: (e.clientX - rect.left) / rect.width,
+      y: (e.clientY - rect.top) / rect.height,
+    };
     return {
       x: (e.clientX - rect.left) * session.width / rect.width,
       y: (e.clientY - rect.top) * session.height / rect.height,
@@ -183,8 +277,16 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
   }
 
   stage.onclick = e => {
-    if (!session.image) return;
     const p = imagePoint(e);
+    if (!session.image && session.stream && session.aiCalibration && session.darts.length < 3) {
+      try {
+        const result = calibratedScore(session.aiCalibration, 1, 1, p.x, p.y);
+        session.darts.push({ ...p, ...result, normalized: true, source: 'manual' });
+        draw();
+      } catch { /* ignore taps until calibration is stable */ }
+      return;
+    }
+    if (!session.image) return;
     if (session.mode === 'calibrate') {
       session.calPoints.push(p);
       if (session.calPoints.length === 4) {
@@ -206,7 +308,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
   };
 
   function marker(x, y, label, cls = '') {
-    const left = x / session.width * 100, top = y / session.height * 100;
+    const left = session.image ? x / session.width * 100 : x * 100;
+    const top = session.image ? y / session.height * 100 : y * 100;
     return `<span class="cam-marker ${cls}" style="left:${left}%;top:${top}%">${label}</span>`;
   }
 
@@ -223,8 +326,12 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       message.innerHTML = session.darts.length < 3
         ? `<b>Pikkaðu á pílurnar</b> — ${session.darts.length} af 3 merktar`
         : '<b>Yfirfarðu kastið</b> og staðfestu';
-    } else if (live) message.textContent = 'Stilltu spjaldið af og taktu mynd';
-    else message.textContent = 'Taktu mynd af spjaldinu eftir kastið';
+    } else if (live) {
+      if (!session.aiCalibration) message.innerHTML = '<b>Leita að spjaldinu…</b> hafðu allan tvöfalda hringinn inni';
+      else if (session.darts.length < 3) message.innerHTML = `<b>AI sér ${session.darts.length} af 3 pílum</b> — færðu símann aðeins ef píla er falin`;
+      else message.innerHTML = '<b>3 pílur fundnar</b> — yfirfarðu og staðfestu';
+    }
+    else message.textContent = 'Opnaðu myndavél — AI finnur spjaldið og pílurnar';
 
     let marks = '';
     session.calPoints.forEach((p, i) => { marks += marker(p.x, p.y, String(i + 1), 'cal'); });
@@ -239,11 +346,18 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       return `<button data-remove="${i}" title="Fjarlægja">${i + 1}: ${label} ×</button>`;
     }).join('');
     chips.querySelectorAll('[data-remove]').forEach(btn => btn.onclick = e => {
-      e.stopPropagation(); session.darts.splice(Number(btn.dataset.remove), 1); draw();
+      e.stopPropagation();
+      const removed = session.darts.splice(Number(btn.dataset.remove), 1)[0];
+      if (removed?.source === 'ai' && removed.boardX != null) {
+        session.aiIgnored.push({ x: removed.boardX, y: removed.boardY });
+      }
+      draw();
     });
 
     if (live) {
-      actions.innerHTML = '<button class="cam-primary" data-act="capture">Taka mynd</button>';
+      actions.innerHTML = `<button data-act="reset-ai">Hreinsa</button>
+        <button data-act="capture">Mynd + pikk</button>
+        <button class="cam-primary" data-act="confirm" ${session.darts.length ? '' : 'disabled'}>Staðfesta ✓</button>`;
     } else if (!session.image) {
       actions.innerHTML = '<button class="cam-primary" data-act="open">Opna myndavél</button>';
     } else if (session.mode === 'calibrate') {
@@ -255,6 +369,9 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     }
     actions.querySelector('[data-act="open"]')?.addEventListener('click', startCamera);
     actions.querySelector('[data-act="capture"]')?.addEventListener('click', takePhoto);
+    actions.querySelector('[data-act="reset-ai"]')?.addEventListener('click', () => {
+      session.darts = []; session.aiCalibration = null; session.aiIgnored = []; draw();
+    });
     actions.querySelector('[data-act="retake"]')?.addEventListener('click', startCamera);
     actions.querySelector('[data-act="undo-cal"]')?.addEventListener('click', () => { session.calPoints.pop(); draw(); });
     actions.querySelector('[data-act="undo"]')?.addEventListener('click', () => { session.darts.pop(); draw(); });

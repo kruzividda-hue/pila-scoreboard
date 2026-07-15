@@ -1,6 +1,6 @@
 // Offline-capable cache for the Píla PWA. Network-first for code/markup so
 // updates load whenever online; cache-first for icons.
-const CACHE = 'pila-v7';
+const CACHE = 'pila-v8';
 const ASSETS = [
   './',
   'index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
   'js/keypad.js',
   'js/board.js',
   'js/camera.js',
+  'js/camera-ai.js',
   'js/games/base.js',
   'js/games/x01.js',
   'js/games/cricket.js',
