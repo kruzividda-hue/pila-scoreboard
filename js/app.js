@@ -314,16 +314,16 @@ function renderPlay() {
 
   // Keep the active player visible inside the dedicated scoreboard scroller.
   // This works for any number of players and for both input-pad heights.
-  requestAnimationFrame(() => {
+  const keepActivePlayerVisible = () => {
     const active = boardHost.querySelector('.pcard.active');
     if (!active) return;
-    const top = active.offsetTop;
-    const bottom = top + active.offsetHeight;
-    const viewTop = boardHost.scrollTop;
-    const viewBottom = viewTop + boardHost.clientHeight;
-    if (bottom > viewBottom) boardHost.scrollTop = bottom - boardHost.clientHeight + 10;
-    else if (top < viewTop) boardHost.scrollTop = Math.max(0, top - 10);
-  });
+    const view = boardHost.getBoundingClientRect();
+    const card = active.getBoundingClientRect();
+    if (card.top < view.top) boardHost.scrollTop += card.top - view.top - 10;
+    else if (card.bottom > view.bottom) boardHost.scrollTop += card.bottom - view.bottom + 10;
+  };
+  // Wait for layout and Safari's scroll anchoring before positioning the card.
+  requestAnimationFrame(() => requestAnimationFrame(keepActivePlayerVisible));
 }
 
 function step(fn) {
