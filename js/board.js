@@ -9,25 +9,35 @@ const SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9,
 // radii in viewBox units (playing area radius = 100, viewBox -120..120)
 const R = { bull: 6, bull25: 14, t1: 55, t2: 66, d1: 89, d2: 100, numbers: 110 };
 
+// Real BDO proportions (fractions of the 170mm double-outer radius, ×100).
+// Used for camera-projected coordinates where finger-sized rings would misscore;
+// matches the deep-darts board config (10mm double/treble beds).
+export const REAL_R = { bull: 3.74, bull25: 9.35, t1: 57.3, t2: 63.2, d1: 94.1, d2: 100 };
+
 const COL = {
   black: '#1f2430', cream: '#f4eddb',
   red: '#dc2626', green: '#15803d',
   wire: '#8a8f98',
 };
 
-// Pure: SVG coords (center 0,0) -> dart. Outside the double ring = miss.
-export function scoreAt(x, y) {
+function classify(x, y, radii) {
   const r = Math.hypot(x, y);
-  if (r <= R.bull) return { num: 25, ring: 2 };   // bullseye (50)
-  if (r <= R.bull25) return { num: 25, ring: 1 }; // outer bull (25)
-  if (r > R.d2) return { num: 0, ring: 1 };       // miss
-  let deg = Math.atan2(x, -y) * 180 / Math.PI;    // 0° at top, clockwise
+  if (r <= radii.bull) return { num: 25, ring: 2 };   // bullseye (50)
+  if (r <= radii.bull25) return { num: 25, ring: 1 }; // outer bull (25)
+  if (r > radii.d2) return { num: 0, ring: 1 };       // miss
+  let deg = Math.atan2(x, -y) * 180 / Math.PI;        // 0° at top, clockwise
   if (deg < 0) deg += 360;
   const num = SECTORS[Math.round(deg / 18) % 20];
-  if (r >= R.t1 && r <= R.t2) return { num, ring: 3 };
-  if (r >= R.d1) return { num, ring: 2 };
+  if (r >= radii.t1 && r <= radii.t2) return { num, ring: 3 };
+  if (r >= radii.d1) return { num, ring: 2 };
   return { num, ring: 1 };
 }
+
+// Pure: SVG coords (center 0,0) -> dart. Finger-friendly widened rings.
+export function scoreAt(x, y) { return classify(x, y, R); }
+
+// Same, but with real board proportions — for camera-projected points.
+export function scoreAtReal(x, y) { return classify(x, y, REAL_R); }
 
 // annular sector path from r1..r2 between angles a1..a2 (degrees from top, cw)
 function wedge(r1, r2, a1, a2) {

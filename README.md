@@ -66,6 +66,23 @@ render(root) historyEntry()` og eiginleikunum `finished` / `winnerId`. Skráðu 
 1. ✅ **Pikka á spjald** — sama staðfestingar-UI og AI mun nota (`scoreAt(x,y)` er hrein fall).
 2. ✅ **Mynd + pikk**: myndavél sýnir spjaldið, notandi kvarðar (4 punktar) og pikkar á ljósmyndina;
    vörpun (homography) reiknar stigin.
-3. ⬜ **Full AI**: DeepDarts-gerð módel (ONNX Runtime Web) finnur pílur + kvörðunarpunkta í mynd;
-   forfyllir umferðina og notandi staðfestir/lagar. Einnar myndavélar nákvæmni er ~85–95% svo
-   staðfestingarskrefið er hluti af hönnuninni.
+3. ✅ **Full AI (beta)**: DeepDarts D2 (TF.js, `js/camera-ai.js`) finnur pílur + kvörðunarpunkta
+   í rauntíma; forfyllir umferðina og notandi staðfestir/lagar. Einnar myndavélar nákvæmni er
+   ~85–95% svo staðfestingarskrefið er hluti af hönnuninni.
+
+### Rúmfræði myndavélarinnar (mikilvægt við breytingar)
+- DeepDarts-kvörðunarpunktarnir sitja á **vírunum** 9° rangsælis við ásana (5/20, 13/6, 3/17,
+  8/11 vírarnir) við **ytri brún** tvöfalda hringsins — sjá `AI_TARGETS` í `js/camera.js`.
+- Handvirka kvörðunin notar miðjur tvöfalda beðsins á ásunum (165/170) — `MANUAL_TARGETS`.
+- Vörpuð myndavélarhnit flokkast með **alvöru hlutföllum** (`scoreAtReal` í `js/board.js`),
+  ekki breikkuðu fingrahringjunum sem teiknaða spjaldið notar.
+- AI „zoomar" sjálfkrafa inn á spjaldið eftir að það finnst (DeepDarts var þjálfað á myndum
+  þar sem spjaldið fyllir rammann).
+- Prófin í `tests/run.mjs` innihalda fixture úr `d2_pred.JPG` viðmiðunarmynd deep-darts;
+  vænt gildi (4, 18, DB) eru merkingar viðmiðunarútfærslunnar sjálfrar.
+
+## Prófanir
+```bash
+node tests/run.mjs
+```
+Leikjalógík, spjald-rúmfræði og myndavélarkvörðun — keyrist án vafra.

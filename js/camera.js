@@ -1,12 +1,23 @@
 // Camera + calibrated tap input (AI roadmap phase 2).
 // Photos and tap markers stay in memory only. Calibration is stored locally.
-import { scoreAt } from './board.js';
+import { scoreAtReal } from './board.js';
 import { dartLabel } from './games/base.js';
 import { detectDarts, loadDartModel } from './camera-ai.js';
 
 const CAL_KEY = 'pila.cameraCalibration.v1';
-const TARGET_R = 94.5; // middle of the double ring in board.js coordinates
-const TARGETS = [[0, -TARGET_R], [TARGET_R, 0], [0, TARGET_R], [-TARGET_R, 0]];
+
+// Manual calibration: the user taps the middle of the double BEDS of 20/6/3/11.
+// Those sit on the vertical/horizontal axes at 165mm of 170mm = 97.06 units.
+const MANUAL_R = 97.06;
+export const MANUAL_TARGETS = [[0, -MANUAL_R], [MANUAL_R, 0], [0, MANUAL_R], [-MANUAL_R, 0]];
+
+// DeepDarts calibration keypoints are NOT on the axes: they sit on the sector
+// WIRES 9° counter-clockwise of each axis (5/20, 13/6, 3/17 and 8/11 wires),
+// at the OUTER edge of the double ring (170mm = 100 units). Order here matches
+// how scanFrame assembles them: top(cal1), right(cal4), bottom(cal2), left(cal3).
+const S9 = Math.sin(9 * Math.PI / 180) * 100;  // 15.643
+const C9 = Math.cos(9 * Math.PI / 180) * 100;  // 98.769
+export const AI_TARGETS = [[-S9, -C9], [C9, -S9], [S9, C9], [-C9, S9]];
 const CAL_STEPS = [
   '<b>1/4:</b> Pikkaðu á miðjan tvöfalda 20 hringinn efst',
   '<b>2/4:</b> Pikkaðu á miðjan tvöfalda 6 hringinn hægra megin',
@@ -31,6 +42,8 @@ let session = {
   darts: [],
   mode: 'camera', // camera | calibrate | score
   aiCalibration: null,
+  aiCalFrame: -99, // frame index when calibration was last seen
+  aiCrop: null,    // zoom region around the found board (normalized square coords)
   aiIgnored: [],
   aiTracks: [],
   aiFrame: 0,
@@ -62,7 +75,7 @@ function solve(a, b) {
 }
 
 // Four image points -> four canonical dartboard points.
-export function homographyFrom4(src, dst = TARGETS) {
+export function homographyFrom4(src, dst = MANUAL_TARGETS) {
   if (src.length !== 4 || dst.length !== 4) throw new Error('Þarf fjóra punkta');
   const a = [], b = [];
   for (let i = 0; i < 4; i++) {
@@ -79,10 +92,11 @@ export function projectPoint(h, x, y) {
           (h[3] * x + h[4] * y + h[5]) / w];
 }
 
-export function calibratedScore(calibration, width, height, x, y) {
+export function calibratedScore(calibration, width, height, x, y, targets = MANUAL_TARGETS) {
   const src = calibration.map(p => [p.x * width, p.y * height]);
-  const [bx, by] = projectPoint(homographyFrom4(src), x, y);
-  return { dart: scoreAt(bx, by), boardX: bx, boardY: by };
+  const [bx, by] = projectPoint(homographyFrom4(src, targets), x, y);
+  // camera points are real board positions: classify with real proportions
+  return { dart: scoreAtReal(bx, by), boardX: bx, boardY: by };
 }
 
 function stopStream() {
@@ -108,6 +122,8 @@ function clearPhoto() {
   session.calPoints = [];
   session.darts = [];
   session.aiCalibration = null;
+  session.aiCalFrame = -99;
+  session.aiCrop = null;
   session.aiIgnored = [];
   session.aiTracks = [];
   session.aiFrame = 0;
@@ -154,7 +170,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     try {
       stopStream();
       session.image = null; session.darts = []; session.calPoints = [];
-      session.aiCalibration = null; session.aiIgnored = []; session.aiTracks = [];
+      session.aiCalibration = null; session.aiCalFrame = -99; session.aiCrop = null;
+      session.aiIgnored = []; session.aiTracks = [];
       session.aiFrame = 0; session.mode = 'camera';
       session.stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -172,21 +189,33 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     }
   }
 
-  function videoSquare(target, size = 800) {
-    const crop = Math.min(video.videoWidth, video.videoHeight);
-    const sx = (video.videoWidth - crop) / 2;
-    const sy = (video.videoHeight - crop) / 2;
+  // Draw the centre square of the video into `target`. When `crop` is given
+  // ({cx, cy, r} in normalized square coords), zoom into that region instead —
+  // DeepDarts was trained on images where the board nearly fills the frame, so
+  // detection is far more reliable on a board-sized crop than on a room-sized
+  // one. Returns the used region so detections can be mapped back.
+  function videoSquare(target, size = 800, crop = null) {
+    const base = Math.min(video.videoWidth, video.videoHeight);
+    const bx = (video.videoWidth - base) / 2;
+    const by = (video.videoHeight - base) / 2;
+    let s = 1, x0 = 0, y0 = 0;
+    if (crop) {
+      s = Math.min(1, Math.max(0.25, crop.r * 2)); // never zoom past 4×
+      x0 = Math.min(1 - s, Math.max(0, crop.cx - s / 2));
+      y0 = Math.min(1 - s, Math.max(0, crop.cy - s / 2));
+    }
     target.width = target.height = size;
     target.getContext('2d', { willReadFrequently: true })
-      .drawImage(video, sx, sy, crop, crop, 0, 0, size, size);
+      .drawImage(video, bx + x0 * base, by + y0 * base, s * base, s * base, 0, 0, size, size);
+    return { x0, y0, s };
   }
 
   function addAIDart(det, calibration) {
     try {
-      const result = calibratedScore(calibration, 1, 1, det.x, det.y);
+      const result = calibratedScore(calibration, 1, 1, det.x, det.y, AI_TARGETS);
       // An automatic miss is much more likely to be a bad calibration than a
       // useful result. Misses remain easy to enter manually.
-      if (result.dart.num === 0 || det.confidence < 0.32) return;
+      if (result.dart.num === 0 || det.confidence < 0.28) return;
       if (session.aiIgnored.some(p => Math.hypot(p.x - result.boardX, p.y - result.boardY) < 8)) return;
       let track = session.aiTracks.find(p =>
         Math.hypot(p.boardX - result.boardX, p.boardY - result.boardY) < 8);
@@ -202,7 +231,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       const near = session.darts.find(p => p.boardX != null
         && Math.hypot(p.boardX - result.boardX, p.boardY - result.boardY) < 7);
       if (near) {
-        if ((det.confidence || 0) >= (near.confidence || 0)) {
+        // never override a dart the user placed or corrected by hand
+        if (near.source !== 'manual' && (det.confidence || 0) >= (near.confidence || 0)) {
           Object.assign(near, det, result, { normalized: true, source: 'ai' });
         }
       } else if (session.darts.length < 3) {
@@ -215,25 +245,44 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     if (!session.stream || generation !== session.aiGeneration || session.aiBusy || !video.videoWidth) return;
     session.aiBusy = true;
     try {
-      videoSquare(aiCanvas);
-      const detections = await detectDarts(aiCanvas, progress => {
+      const region = videoSquare(aiCanvas, 800, session.aiCrop);
+      const raw = await detectDarts(aiCanvas, progress => {
         message.innerHTML = `<b>AI hleðst…</b> ${Math.round(progress * 100)}%`;
       });
       if (generation !== session.aiGeneration) return;
       session.aiFrame++;
+      // map detections from the (possibly zoomed) crop back to full-square coords
+      const detections = raw.map(d => ({
+        ...d,
+        x: region.x0 + d.x * region.s, y: region.y0 + d.y * region.s,
+        w: d.w * region.s, h: d.h * region.s,
+      }));
       const byClass = cls => detections.filter(d => d.cls === cls)
         .sort((a, b) => b.confidence - a.confidence)[0];
-      // DeepDarts classes are top, bottom, left, right. calibratedScore expects
+      // DeepDarts classes are top, bottom, left, right. AI_TARGETS expects
       // top, right, bottom, left.
       const cal = [byClass(1), byClass(4), byClass(2), byClass(3)];
       if (cal.every(Boolean)) {
         session.aiCalibration = cal.map(p => ({ x: p.x, y: p.y }));
+        session.aiCalFrame = session.aiFrame;
+        // zoom the next frames in on the board — matches the training data,
+        // where the board nearly fills the image
+        const cx = cal.reduce((a, p) => a + p.x, 0) / 4;
+        const cy = cal.reduce((a, p) => a + p.y, 0) / 4;
+        const r = Math.max(...cal.map(p => Math.hypot(p.x - cx, p.y - cy))) * 1.25;
+        session.aiCrop = { cx, cy, r };
+      } else if (session.aiFrame - session.aiCalFrame > 6) {
+        session.aiCrop = null; // lost the board — search the full frame again
+      }
+      // darts may be added as long as we have a recent calibration, even if
+      // one calibration point is briefly occluded by an arm or a dart
+      if (session.aiCalibration && session.aiFrame - session.aiCalFrame <= 6) {
         detections.filter(d => d.cls === 0)
-          .filter(d => !cal.some(p => Math.hypot(p.x - d.x, p.y - d.y) < 0.055))
+          .filter(d => !session.aiCalibration.some(p => Math.hypot(p.x - d.x, p.y - d.y) < 0.03))
           .sort((a, b) => b.confidence - a.confidence)
           .slice(0, 3).forEach(d => addAIDart(d, session.aiCalibration));
       }
-      session.aiTracks = session.aiTracks.filter(t => session.aiFrame - t.lastFrame <= 4 || t.hits >= 2);
+      session.aiTracks = session.aiTracks.filter(t => session.aiFrame - t.lastFrame <= 4);
       draw();
     } catch (err) {
       message.textContent = 'AI náði ekki að greina rammann — reyndu að halda spjaldinu öllu inni.';
@@ -302,7 +351,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     const p = imagePoint(e);
     if (!session.image && session.stream && session.aiCalibration && session.darts.length < 3) {
       try {
-        const result = calibratedScore(session.aiCalibration, 1, 1, p.x, p.y);
+        const result = calibratedScore(session.aiCalibration, 1, 1, p.x, p.y, AI_TARGETS);
         session.darts.push({ ...p, ...result, normalized: true, source: 'manual' });
         draw();
       } catch { /* ignore taps until calibration is stable */ }
@@ -392,7 +441,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     actions.querySelector('[data-act="open"]')?.addEventListener('click', startCamera);
     actions.querySelector('[data-act="capture"]')?.addEventListener('click', takePhoto);
     actions.querySelector('[data-act="reset-ai"]')?.addEventListener('click', () => {
-      session.darts = []; session.aiCalibration = null; session.aiIgnored = [];
+      session.darts = []; session.aiCalibration = null; session.aiCalFrame = -99;
+      session.aiCrop = null; session.aiIgnored = [];
       session.aiTracks = []; session.aiFrame = 0; draw();
     });
     actions.querySelector('[data-act="retake"]')?.addEventListener('click', startCamera);
