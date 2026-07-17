@@ -53,7 +53,7 @@ function nms(candidates) {
   return kept;
 }
 
-function decode(data, shape) {
+function decode(data, shape, minScore) {
   const cellStride = shape[3];
   const stride = 10; // x, y, w, h, objectness + five class probabilities
   const candidates = [];
@@ -66,7 +66,7 @@ function decode(data, shape) {
         if (data[i + 5 + c] > probability) { probability = data[i + 5 + c]; cls = c; }
       }
       const confidence = objectness * probability;
-      if (confidence >= SCORE_THRESHOLD) {
+      if (confidence >= minScore) {
         candidates.push({
           x: data[i], y: data[i + 1], w: data[i + 2], h: data[i + 3],
           cls, confidence,
@@ -77,7 +77,9 @@ function decode(data, shape) {
   return candidates;
 }
 
-export async function detectDarts(source, onProgress) {
+// minScore below SCORE_THRESHOLD surfaces weak detections (debug view);
+// callers filter for their own purposes.
+export async function detectDarts(source, onProgress, minScore = SCORE_THRESHOLD) {
   const model = await loadDartModel(onProgress);
   const tf = window.tf;
   const input = tf.tidy(() => tf.browser.fromPixels(source)
@@ -89,7 +91,7 @@ export async function detectDarts(source, onProgress) {
   const tensors = Array.isArray(output) ? output : Object.values(output);
   try {
     const decoded = [];
-    for (const tensor of tensors) decoded.push(...decode(await tensor.data(), tensor.shape));
+    for (const tensor of tensors) decoded.push(...decode(await tensor.data(), tensor.shape, minScore));
     return nms(decoded);
   } finally {
     tensors.forEach(tensor => tensor.dispose());

@@ -109,7 +109,8 @@ export function projectPoint(h, x, y) {
 // DeepDarts classes are dart(0), top(1), bottom(2), left(3), right(4).
 // Returns [top, right, bottom, left] to match AI_TARGETS, or null.
 function pickCal(detections) {
-  const byClass = cls => detections.filter(d => d.cls === cls)
+  // ignore weak detections that a low debug threshold may have let through
+  const byClass = cls => detections.filter(d => d.cls === cls && d.confidence >= 0.18)
     .sort((a, b) => b.confidence - a.confidence)[0];
   const cal = [byClass(1), byClass(4), byClass(2), byClass(3)];
   return cal.every(Boolean) ? cal : null;
@@ -287,9 +288,10 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     session.aiBusy = true;
     try {
       const region = videoSquare(aiCanvas, 800, session.aiCrop);
+      // with the debug view on, surface even very weak detections (6%+)
       const raw = await detectDarts(aiCanvas, progress => {
         message.innerHTML = `<b>AI hleðst…</b> ${Math.round(progress * 100)}%`;
-      });
+      }, session.debug ? 0.06 : undefined);
       if (generation !== session.aiGeneration) return;
       session.aiFrame++;
       // map detections from the (possibly zoomed) crop back to full-square coords
@@ -386,7 +388,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       ctx.drawImage(canvas, 0, 0, 800, 800);
       let dets = await detectDarts(aiCanvas, p => {
         message.innerHTML = `<b>AI hleðst…</b> ${Math.round(p * 100)}%`;
-      });
+      }, session.debug ? 0.06 : undefined);
       let cal = pickCal(dets);
       if (cal) {
         // zoomed second pass around the board
@@ -398,7 +400,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
         const y0 = Math.min(1 - s, Math.max(0, cy - s / 2));
         ctx.drawImage(canvas, x0 * session.width, y0 * session.width,
           s * session.width, s * session.width, 0, 0, 800, 800);
-        const zoomed = (await detectDarts(aiCanvas)).map(d => ({
+        const zoomed = (await detectDarts(aiCanvas, undefined, session.debug ? 0.06 : undefined)).map(d => ({
           ...d, x: x0 + d.x * s, y: y0 + d.y * s, w: d.w * s, h: d.h * s,
         }));
         const cal2 = pickCal(zoomed);
@@ -413,7 +415,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       }
       session.aiCalibration = cal.map(p => ({ x: p.x, y: p.y }));
       session.aiTilt = tiltRatio(session.aiCalibration);
-      for (const d of dets.filter(d => d.cls === 0)
+      for (const d of dets.filter(d => d.cls === 0 && d.confidence >= 0.28)
         .filter(d => !session.aiCalibration.some(p => Math.hypot(p.x - d.x, p.y - d.y) < 0.03))
         .sort((a, b) => b.confidence - a.confidence).slice(0, 3)) {
         try {
