@@ -138,6 +138,11 @@ function stopAI() {
 
 export function closeCamera() { stopStream(); }
 
+// Backgrounding the app must not keep the camera and the AI loop burning
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopStream(); });
+}
+
 function clearPhoto() {
   stopStream();
   session.image = null;
@@ -183,6 +188,12 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
   const canvas = root.querySelector('canvas');
   const aiCanvas = document.createElement('canvas');
   aiCanvas.width = aiCanvas.height = 800;
+  // tiny thumbnail pair for cheap frame-difference motion detection
+  const motionCanvas = document.createElement('canvas');
+  const MOTION_SIZE = 48;
+  motionCanvas.width = motionCanvas.height = MOTION_SIZE;
+  let lastThumb = null;
+  let lastScanAt = 0;
   const stage = root.querySelector('.cam-stage');
   const markerLayer = root.querySelector('.cam-markers');
   const message = root.querySelector('.cam-message');
@@ -215,9 +226,11 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       session.aiCalibration = null; session.aiCalFrame = -99; session.aiTilt = 1;
       session.aiCrop = null; session.aiIgnored = []; session.aiTracks = [];
       session.aiFrame = 0; session.mode = 'camera';
+      // 720p is plenty: the AI input is 800×800 from the centre square, and a
+      // lighter stream keeps the phone much cooler
       session.stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
       });
       video.srcObject = session.stream;
       await video.play();
@@ -250,6 +263,42 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     target.getContext('2d', { willReadFrequently: true })
       .drawImage(video, bx + x0 * base, by + y0 * base, s * base, s * base, 0, 0, size, size);
     return { x0, y0, s };
+  }
+
+  // Mean absolute pixel difference (0..1) between this frame and the previous
+  // one, on a 48×48 thumbnail — costs microseconds, gates the heavy AI work.
+  function frameMotion() {
+    if (!video.videoWidth) return 1;
+    const base = Math.min(video.videoWidth, video.videoHeight);
+    const bx = (video.videoWidth - base) / 2, by = (video.videoHeight - base) / 2;
+    const ctx = motionCanvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, bx, by, base, base, 0, 0, MOTION_SIZE, MOTION_SIZE);
+    const cur = ctx.getImageData(0, 0, MOTION_SIZE, MOTION_SIZE).data;
+    if (!lastThumb) { lastThumb = cur; return 1; }
+    let sum = 0;
+    for (let i = 0; i < cur.length; i += 4) {
+      sum += Math.abs(cur[i] - lastThumb[i])
+        + Math.abs(cur[i + 1] - lastThumb[i + 1])
+        + Math.abs(cur[i + 2] - lastThumb[i + 2]);
+    }
+    lastThumb = cur;
+    return sum / (MOTION_SIZE * MOTION_SIZE * 3 * 255);
+  }
+
+  // Scheduler: decides ~2× a second whether an AI scan is actually needed.
+  // A static, locked board only gets a heartbeat scan — this is what keeps
+  // the phone cool during a normal game.
+  function tick(generation) {
+    if (!session.stream || generation !== session.aiGeneration) return;
+    const m = frameMotion();
+    const since = performance.now() - lastScanAt;
+    const due =
+      !session.aiCalibration ? since > 700   // still hunting for the board
+        : m > 0.045 ? since > 1500           // lots of motion: track slowly
+          : m > 0.012 ? true                 // change just happened: scan now
+            : since > 5000;                  // static scene: heartbeat
+    if (due && !session.aiBusy) { lastScanAt = performance.now(); scanFrame(generation); }
+    session.aiTimer = setTimeout(() => tick(generation), 450);
   }
 
   function addAIDart(det, calibration) {
@@ -329,22 +378,20 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       message.textContent = 'AI náði ekki að greina rammann — reyndu að halda spjaldinu öllu inni.';
       console.warn('DeepDarts inference failed', err);
     } finally {
-      session.aiBusy = false;
-      if (session.stream && generation === session.aiGeneration) {
-        session.aiTimer = setTimeout(() => scanFrame(generation), 500);
-      }
+      session.aiBusy = false; // scheduling is handled by tick()
     }
   }
 
   function startAI() {
     stopAI();
     const generation = session.aiGeneration;
+    lastThumb = null; lastScanAt = 0;
     message.innerHTML = '<b>AI hleðst…</b> fyrsta skiptið getur tekið smástund';
     loadDartModel(progress => {
       if (generation === session.aiGeneration) {
         message.innerHTML = `<b>AI hleðst…</b> ${Math.round(progress * 100)}%`;
       }
-    }).then(() => scanFrame(generation)).catch(() => {
+    }).then(() => tick(generation)).catch(() => {
       message.textContent = 'Ekki tókst að hlaða AI-líkaninu.';
     });
   }
