@@ -211,6 +211,14 @@ const players = [{ id: 'A', name: 'Alice' }, { id: 'B', name: 'Bob' }];
     const { dart } = calibratedScore(aiCal, 1, 1, d.x, d.y, cam.AI_TARGETS);
     ok(`píla (${d.x}, ${d.y}) = ${expect}`, fmt(dart) === expect, `fékk ${fmt(dart)}`);
   }
+
+  head('Myndavél: skáhornsmæling (tiltRatio)');
+  const faceOn = [{ x: .5, y: .1 }, { x: .9, y: .5 }, { x: .5, y: .9 }, { x: .1, y: .5 }];
+  ok('bein sýn ≈ 1', cam.tiltRatio(faceOn) === 1);
+  const skewed = [{ x: .5, y: .3 }, { x: .9, y: .5 }, { x: .5, y: .7 }, { x: .1, y: .5 }];
+  ok('mikill skái < 0.82', cam.tiltRatio(skewed) < 0.82, String(cam.tiltRatio(skewed)));
+  ok('viðmiðunarmyndin telst nógu bein', cam.tiltRatio(aiCal) >= 0.82,
+    String(cam.tiltRatio(aiCal)));
 }
 
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);

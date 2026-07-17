@@ -18,6 +18,17 @@ export const MANUAL_TARGETS = [[0, -MANUAL_R], [MANUAL_R, 0], [0, MANUAL_R], [-M
 const S9 = Math.sin(9 * Math.PI / 180) * 100;  // 15.643
 const C9 = Math.cos(9 * Math.PI / 180) * 100;  // 98.769
 export const AI_TARGETS = [[-S9, -C9], [C9, -S9], [S9, C9], [-C9, S9]];
+
+// How face-on is the camera? The four calibration points span two orthogonal
+// board diameters; seen at an angle a circle becomes an ellipse and the
+// shorter diameter shrinks by cos(tilt). 1 = straight on, <0.82 ≈ >35° skew,
+// where dart-tip parallax starts producing wrong beds/sectors.
+export function tiltRatio(cal) {
+  const d1 = Math.hypot(cal[0].x - cal[2].x, cal[0].y - cal[2].y); // top-bottom
+  const d2 = Math.hypot(cal[1].x - cal[3].x, cal[1].y - cal[3].y); // right-left
+  if (!d1 || !d2) return 1;
+  return Math.min(d1, d2) / Math.max(d1, d2);
+}
 const CAL_STEPS = [
   '<b>1/4:</b> Pikkaðu á miðjan tvöfalda 20 hringinn efst',
   '<b>2/4:</b> Pikkaðu á miðjan tvöfalda 6 hringinn hægra megin',
@@ -43,6 +54,7 @@ let session = {
   mode: 'camera', // camera | calibrate | score
   aiCalibration: null,
   aiCalFrame: -99, // frame index when calibration was last seen
+  aiTilt: 1,       // 1 = camera face-on; lower = skewed viewing angle
   aiCrop: null,    // zoom region around the found board (normalized square coords)
   aiIgnored: [],
   aiTracks: [],
@@ -123,6 +135,7 @@ function clearPhoto() {
   session.darts = [];
   session.aiCalibration = null;
   session.aiCalFrame = -99;
+  session.aiTilt = 1;
   session.aiCrop = null;
   session.aiIgnored = [];
   session.aiTracks = [];
@@ -170,8 +183,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     try {
       stopStream();
       session.image = null; session.darts = []; session.calPoints = [];
-      session.aiCalibration = null; session.aiCalFrame = -99; session.aiCrop = null;
-      session.aiIgnored = []; session.aiTracks = [];
+      session.aiCalibration = null; session.aiCalFrame = -99; session.aiTilt = 1;
+      session.aiCrop = null; session.aiIgnored = []; session.aiTracks = [];
       session.aiFrame = 0; session.mode = 'camera';
       session.stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -265,6 +278,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       if (cal.every(Boolean)) {
         session.aiCalibration = cal.map(p => ({ x: p.x, y: p.y }));
         session.aiCalFrame = session.aiFrame;
+        session.aiTilt = tiltRatio(session.aiCalibration);
         // zoom the next frames in on the board — matches the training data,
         // where the board nearly fills the image
         const cx = cal.reduce((a, p) => a + p.x, 0) / 4;
@@ -398,7 +412,9 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
         ? `<b>Pikkaðu á pílurnar</b> — ${session.darts.length} af 3 merktar`
         : '<b>Yfirfarðu kastið</b> og staðfestu';
     } else if (live) {
+      const skewed = session.aiCalibration && session.aiTilt < 0.82;
       if (!session.aiCalibration) message.innerHTML = '<b>Leita að spjaldinu…</b> hafðu allan tvöfalda hringinn inni';
+      else if (skewed) message.innerHTML = '📐 <b>Mikill skái</b> — hafðu símann beint fyrir framan spjaldið, annars mislesast pílur';
       else if (session.darts.length < 3) message.innerHTML = `<b>AI sér ${session.darts.length} af 3 pílum</b> — færðu símann aðeins ef píla er falin`;
       else message.innerHTML = '<b>3 pílur fundnar</b> — yfirfarðu og staðfestu';
     }
@@ -442,7 +458,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     actions.querySelector('[data-act="capture"]')?.addEventListener('click', takePhoto);
     actions.querySelector('[data-act="reset-ai"]')?.addEventListener('click', () => {
       session.darts = []; session.aiCalibration = null; session.aiCalFrame = -99;
-      session.aiCrop = null; session.aiIgnored = [];
+      session.aiTilt = 1; session.aiCrop = null; session.aiIgnored = [];
       session.aiTracks = []; session.aiFrame = 0; draw();
     });
     actions.querySelector('[data-act="retake"]')?.addEventListener('click', startCamera);
