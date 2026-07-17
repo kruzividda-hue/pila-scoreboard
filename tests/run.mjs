@@ -266,5 +266,43 @@ const players = [{ id: 'A', name: 'Alice' }, { id: 'B', name: 'Bob' }];
     String(cam.tiltRatio(aiCal)));
 }
 
+// ---------------------------------------------------------------- diff engine
+{
+  head('Diff-vél (js/diff.js)');
+  const { diffBlobs, blobTip, toGray } = await load('../js/diff.js');
+  const W = 120, H = 120;
+  const base = () => new Uint8Array(W * H).fill(100);
+
+  // a new vertical "dart" streak appears: x 60..63, y 30..70
+  const prev = base();
+  const cur = base();
+  for (let y = 30; y <= 70; y++) for (let x = 60; x <= 63; x++) cur[y * W + x] = 200;
+  const blobs = diffBlobs(prev, cur, W, H, { minArea: 30 });
+  ok('finnur nýja pílu-slóð', blobs.length === 1 && blobs[0].area === 41 * 4,
+    String(blobs[0]?.area));
+  ok('oddur = endinn nær miðju (miðja fyrir neðan)',
+    blobTip(blobs[0], W, 60, 110).y === 70, JSON.stringify(blobTip(blobs[0], W, 60, 110)));
+  ok('oddur = endinn nær miðju (miðja fyrir ofan)',
+    blobTip(blobs[0], W, 60, 5).y === 30, JSON.stringify(blobTip(blobs[0], W, 60, 5)));
+
+  // pixel noise below the threshold is ignored
+  const noisy = base(); noisy[50 * W + 50] = 120; // +20 < 26
+  ok('suð undir þröskuldi hunsað', diffBlobs(prev, noisy, W, H).length === 0);
+
+  // camera drift: the SAME streak shifts 3px — compensation must cancel it
+  const prevS = base();
+  for (let y = 30; y <= 70; y++) for (let x = 60; x <= 63; x++) prevS[y * W + x] = 200;
+  const curS = base();
+  for (let y = 30; y <= 70; y++) for (let x = 63; x <= 66; x++) curS[y * W + x] = 200;
+  ok('reki ÁN leiðréttingar sést sem breyting',
+    diffBlobs(prevS, curS, W, H, { minArea: 30 }).length >= 1);
+  ok('reka-leiðrétting eyðir fölsku breytingunni',
+    diffBlobs(prevS, curS, W, H, { minArea: 30, dx: 3 }).length === 0);
+
+  // toGray: luma of a pure-white RGBA pixel is 255
+  const rgba = new Uint8ClampedArray([255, 255, 255, 255]);
+  ok('toGray luma', toGray(rgba, 1, 1)[0] === 255, String(toGray(rgba, 1, 1)[0]));
+}
+
 console.log(`\n=== ${pass} passed, ${fail} failed ===`);
 process.exit(fail ? 1 : 0);

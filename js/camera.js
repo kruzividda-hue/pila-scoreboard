@@ -3,6 +3,7 @@
 import { scoreAtReal } from './board.js';
 import { dartLabel } from './games/base.js';
 import { detectDarts, loadDartModel } from './camera-ai.js';
+import { toGray, diffBlobs, blobTip } from './diff.js';
 
 const CAL_KEY = 'pila.cameraCalibration.v1';
 
@@ -215,6 +216,13 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
   motionCanvas.width = motionCanvas.height = MOTION_SIZE;
   let lastThumb = null;
   let lastScanAt = 0;
+  // settled-frame pair for the diff dart finder
+  const DIFF_SIZE = 400;
+  const diffCanvas = document.createElement('canvas');
+  diffCanvas.width = diffCanvas.height = DIFF_SIZE;
+  let settledPrev = null;   // { gray, cal } captured when the scene was still
+  let stillTicks = 0;
+  let motionSince = false;  // was there real motion since the last settle?
   const stage = root.querySelector('.cam-stage');
   const markerLayer = root.querySelector('.cam-markers');
   const message = root.querySelector('.cam-message');
@@ -306,12 +314,75 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     return sum / (MOTION_SIZE * MOTION_SIZE * 3 * 255);
   }
 
+  function captureSettled() {
+    const base = Math.min(video.videoWidth, video.videoHeight);
+    const bx = (video.videoWidth - base) / 2, by = (video.videoHeight - base) / 2;
+    const ctx = diffCanvas.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(video, bx, by, base, base, 0, 0, DIFF_SIZE, DIFF_SIZE);
+    const rgba = ctx.getImageData(0, 0, DIFF_SIZE, DIFF_SIZE).data;
+    return { gray: toGray(rgba, DIFF_SIZE, DIFF_SIZE), cal: session.aiCalibration };
+  }
+
+  // Diff dart finder: something changed and settled — the difference between
+  // the two settled frames is the new dart(s), whatever they look like.
+  function runDiff(prev, cur) {
+    if (!prev.cal || !cur.cal || session.darts.length >= 3) return;
+    // camera drift between the frames, measured from the calibration points
+    const dx = Math.round((cur.cal.reduce((a, p) => a + p.x, 0)
+      - prev.cal.reduce((a, p) => a + p.x, 0)) / 4 * DIFF_SIZE);
+    const dy = Math.round((cur.cal.reduce((a, p) => a + p.y, 0)
+      - prev.cal.reduce((a, p) => a + p.y, 0)) / 4 * DIFF_SIZE);
+    if (Math.hypot(dx, dy) > DIFF_SIZE * 0.02) return; // moved too much to trust
+    const blobs = diffBlobs(prev.gray, cur.gray, DIFF_SIZE, DIFF_SIZE, { dx, dy });
+    if (!blobs.length) return;
+    let bull;
+    try {
+      const hInv = homographyFrom4(AI_TARGETS, cur.cal.map(p => [p.x, p.y]));
+      const [ux, uy] = projectPoint(hInv, 0, 0);
+      bull = { x: ux * DIFF_SIZE, y: uy * DIFF_SIZE };
+    } catch { return; }
+    let added = false;
+    for (const blob of blobs.slice(0, 3)) {
+      const t = blobTip(blob, DIFF_SIZE, bull.x, bull.y);
+      let x = t.x / DIFF_SIZE, y = t.y / DIFF_SIZE;
+      // a (possibly weak) model tip prediction near the blob beats the heuristic
+      const hint = (session.aiLast || []).filter(d => d.cls === 0)
+        .find(d => Math.hypot(d.x - x, d.y - y) < 0.05);
+      if (hint) { x = hint.x; y = hint.y; }
+      try {
+        const result = calibratedScore(cur.cal, 1, 1, x, y, AI_TARGETS);
+        if (result.dart.num === 0) continue;
+        if (session.aiIgnored.some(p => Math.hypot(p.x - result.boardX, p.y - result.boardY) < 8)) continue;
+        const near = session.darts.find(p => p.boardX != null
+          && Math.hypot(p.boardX - result.boardX, p.boardY - result.boardY) < 7);
+        if (!near && session.darts.length < 3) {
+          session.darts.push({ x, y, ...result, normalized: true, source: 'diff' });
+          added = true;
+        }
+      } catch { /* skip unprojectable blob */ }
+    }
+    if (added) draw();
+  }
+
   // Scheduler: decides ~2× a second whether an AI scan is actually needed.
   // A static, locked board only gets a heartbeat scan — this is what keeps
-  // the phone cool during a normal game.
+  // the phone cool during a normal game. Settle transitions also drive the
+  // diff dart finder.
   function tick(generation) {
     if (!session.stream || generation !== session.aiGeneration) return;
     const m = frameMotion();
+    if (m < 0.012) {
+      stillTicks++;
+      if (stillTicks === 2 && video.videoWidth) {
+        const snap = captureSettled();
+        if (motionSince && settledPrev && session.aiCalibration) runDiff(settledPrev, snap);
+        settledPrev = snap;
+        motionSince = false;
+      }
+    } else {
+      stillTicks = 0;
+      if (m > 0.03) motionSince = true;
+    }
     const since = performance.now() - lastScanAt;
     const due =
       !session.aiCalibration ? since > 700   // still hunting for the board
@@ -358,10 +429,11 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     session.aiBusy = true;
     try {
       const region = videoSquare(aiCanvas, 800, session.aiCrop);
-      // with the debug view on, surface even very weak detections (6%+)
+      // always decode down to 6%: weak dart hints refine the diff finder's tip
+      // placement, and the debug view shows them; scoring keeps its own gates
       const raw = await detectDarts(aiCanvas, progress => {
         message.innerHTML = `<b>AI hleðst…</b> ${Math.round(progress * 100)}%`;
-      }, session.debug ? 0.06 : undefined);
+      }, 0.06);
       if (generation !== session.aiGeneration) return;
       session.aiFrame++;
       // map detections from the (possibly zoomed) crop back to full-square coords
@@ -407,6 +479,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     stopAI();
     const generation = session.aiGeneration;
     lastThumb = null; lastScanAt = 0;
+    settledPrev = null; stillTicks = 0; motionSince = false;
     message.innerHTML = '<b>AI hleðst…</b> fyrsta skiptið getur tekið smástund';
     loadDartModel(progress => {
       if (generation === session.aiGeneration) {
@@ -653,7 +726,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     chips.querySelectorAll('[data-remove]').forEach(btn => btn.onclick = e => {
       e.stopPropagation();
       const removed = session.darts.splice(Number(btn.dataset.remove), 1)[0];
-      if (removed?.source === 'ai' && removed.boardX != null) {
+      if ((removed?.source === 'ai' || removed?.source === 'diff') && removed.boardX != null) {
         session.aiIgnored.push({ x: removed.boardX, y: removed.boardY });
       }
       draw();

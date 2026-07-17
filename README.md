@@ -69,6 +69,11 @@ render(root) historyEntry()` og eiginleikunum `finished` / `winnerId`. Skráðu 
 3. ✅ **Full AI (beta)**: DeepDarts D2 (TF.js, `js/camera-ai.js`) finnur pílur + kvörðunarpunkta
    í rauntíma; forfyllir umferðina og notandi staðfestir/lagar. Einnar myndavélar nákvæmni er
    ~85–95% svo staðfestingarskrefið er hluti af hönnuninni.
+4. ✅ **Diff-vél (beta, `js/diff.js`)**: D2-módelið alhæfir illa á ókunnug píluútlit, svo
+   pílufundurinn styðst líka við rammasamanburð: þegar hreyfing róast er „kyrra-mynd" tekin,
+   næsta ró borin saman við hana (reki leiðréttur með kvörðunarpunktunum) og nýir blettir =
+   nýjar pílur. Oddur = sá endi blettsins sem er næst bull; veik módelgreining (≥6%) á
+   blettinum fínstillir oddinn. Módel-lestur (≥28%) og diff vinna saman.
 
 ### Rúmfræði myndavélarinnar (mikilvægt við breytingar)
 - DeepDarts-kvörðunarpunktarnir sitja á **vírunum** 9° rangsælis við ásana (5/20, 13/6, 3/17,

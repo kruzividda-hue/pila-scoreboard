@@ -11,6 +11,7 @@ const ASSETS = [
   'js/board.js',
   'js/camera.js',
   'js/camera-ai.js',
+  'js/diff.js',
   'js/games/base.js',
   'js/games/x01.js',
   'js/games/cricket.js',
