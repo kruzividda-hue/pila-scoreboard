@@ -108,12 +108,33 @@ export function projectPoint(h, x, y) {
 
 // DeepDarts classes are dart(0), top(1), bottom(2), left(3), right(4).
 // Returns [top, right, bottom, left] to match AI_TARGETS, or null.
-function pickCal(detections) {
-  // ignore weak detections that a low debug threshold may have let through
-  const byClass = cls => detections.filter(d => d.cls === cls && d.confidence >= 0.18)
-    .sort((a, b) => b.confidence - a.confidence)[0];
-  const cal = [byClass(1), byClass(4), byClass(2), byClass(3)];
-  return cal.every(Boolean) ? cal : null;
+// Confidence alone is not enough: the model sometimes reports a near-100%
+// calibration point on the WRONG side of the board (e.g. a second "top" down
+// by the 3), and one bad frame then flips the whole homography and sprays
+// phantom darts. So each point must also sit on its own side of the centroid.
+export function pickCal(detections) {
+  const cands = cls => detections.filter(d => d.cls === cls && d.confidence >= 0.18)
+    .sort((a, b) => b.confidence - a.confidence).slice(0, 4);
+  const clsFor = [1, 4, 2, 3]; // top, right, bottom, left
+  const best = clsFor.map(cls => cands(cls)[0]);
+  if (!best.every(Boolean)) return null;
+  const cx = best.reduce((a, p) => a + p.x, 0) / 4;
+  const cy = best.reduce((a, p) => a + p.y, 0) / 4;
+  const onOwnSide = [
+    d => d.y < cy, // top
+    d => d.x > cx, // right
+    d => d.y > cy, // bottom
+    d => d.x < cx, // left
+  ];
+  const cal = clsFor.map((cls, i) => cands(cls).find(onOwnSide[i]));
+  if (!cal.every(Boolean)) return null;
+  // reject degenerate sets (two points nearly on top of each other)
+  for (let i = 0; i < 4; i++) {
+    for (let j = i + 1; j < 4; j++) {
+      if (Math.hypot(cal[i].x - cal[j].x, cal[i].y - cal[j].y) < 0.05) return null;
+    }
+  }
+  return cal;
 }
 
 export function calibratedScore(calibration, width, height, x, y, targets = MANUAL_TARGETS) {

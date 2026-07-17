@@ -225,6 +225,38 @@ const players = [{ id: 'A', name: 'Alice' }, { id: 'B', name: 'Bob' }];
       JSON.stringify(back));
   }
 
+  head('Myndavél: kvörðunarval (pickCal)');
+  {
+    // From a real field screenshot: a FALSE cal1 ("top") appeared near the
+    // bottom of the board at 97%, competing with the true top point at 98%.
+    // Geometry must beat raw confidence.
+    const D = (cls, x, y, confidence) => ({ cls, x, y, confidence });
+    const scene = [
+      D(1, 0.42, 0.30, 0.98),  // true top
+      D(1, 0.55, 0.75, 0.97),  // false "top" down by the 3 — must lose
+      D(4, 0.75, 0.55, 1.00),  // right
+      D(2, 0.52, 0.80, 1.00),  // bottom
+      D(3, 0.23, 0.62, 0.98),  // left
+      D(0, 0.45, 0.40, 0.65),  // a dart, should be ignored by pickCal
+    ];
+    const cal = cam.pickCal(scene);
+    ok('velur rétta toppinn þrátt fyrir 97% draug', cal && cal[0].y === 0.30,
+      JSON.stringify(cal?.[0]));
+    // false top even MORE confident: still rejected by geometry
+    scene[1].confidence = 0.999;
+    const cal2 = cam.pickCal(scene);
+    ok('rúmfræði vinnur líka við 99.9% draug', cal2 && cal2[0].y === 0.30);
+    // missing left point -> null
+    const cal3 = cam.pickCal(scene.filter(d => d.cls !== 3));
+    ok('vantar punkt = engin kvörðun', cal3 === null);
+    // degenerate: two points nearly identical -> null
+    const cal4 = cam.pickCal([
+      D(1, 0.50, 0.30, 0.9), D(4, 0.51, 0.31, 0.9),
+      D(2, 0.50, 0.80, 0.9), D(3, 0.20, 0.55, 0.9),
+    ]);
+    ok('samfallnir punktar hafnað', cal4 === null);
+  }
+
   head('Myndavél: skáhornsmæling (tiltRatio)');
   const faceOn = [{ x: .5, y: .1 }, { x: .9, y: .5 }, { x: .5, y: .9 }, { x: .1, y: .5 }];
   ok('bein sýn ≈ 1', cam.tiltRatio(faceOn) === 1);
