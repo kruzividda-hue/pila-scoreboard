@@ -152,6 +152,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       <video playsinline muted></video>
       <canvas></canvas>
       <div class="cam-empty">📷<br><span>Mynd af píluspjaldinu</span></div>
+      <svg class="cam-ring" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <polygon fill="none" stroke-width="0.8" points=""/></svg>
       <div class="cam-markers"></div>
     </div>
     <div class="cam-chips"></div>
@@ -419,6 +421,30 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       else message.innerHTML = '<b>3 pílur fundnar</b> — yfirfarðu og staðfestu';
     }
     else message.textContent = 'Opnaðu myndavél — AI finnur spjaldið og pílurnar';
+
+    // AR ring: project the outer double ring back onto the live image so the
+    // user sees that (and how well) the board is locked. Green = good angle,
+    // amber = too skewed to trust dart reads.
+    const ringSvg = root.querySelector('.cam-ring');
+    const ringPoly = ringSvg.querySelector('polygon');
+    const locked = live && session.aiCalibration
+      && session.aiFrame - session.aiCalFrame <= 6;
+    if (locked) {
+      try {
+        const hInv = homographyFrom4(AI_TARGETS, session.aiCalibration.map(p => [p.x, p.y]));
+        let pts = '';
+        for (let a = 0; a < 360; a += 5) {
+          const t = a * Math.PI / 180;
+          const [ix, iy] = projectPoint(hInv, 100 * Math.sin(t), -100 * Math.cos(t));
+          pts += `${(ix * 100).toFixed(1)},${(iy * 100).toFixed(1)} `;
+        }
+        ringPoly.setAttribute('points', pts.trim());
+        ringPoly.setAttribute('stroke', session.aiTilt < 0.82 ? '#f59e0b' : '#4ade80');
+        ringSvg.style.display = 'block';
+      } catch { ringSvg.style.display = 'none'; }
+    } else {
+      ringSvg.style.display = 'none';
+    }
 
     let marks = '';
     session.calPoints.forEach((p, i) => { marks += marker(p.x, p.y, String(i + 1), 'cal'); });

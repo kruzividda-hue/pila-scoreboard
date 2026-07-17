@@ -212,6 +212,19 @@ const players = [{ id: 'A', name: 'Alice' }, { id: 'B', name: 'Bob' }];
     ok(`píla (${d.x}, ${d.y}) = ${expect}`, fmt(dart) === expect, `fékk ${fmt(dart)}`);
   }
 
+  head('Myndavél: öfug vörpun (AR-hringurinn)');
+  {
+    const srcPts = aiCal.map(p => [p.x, p.y]);
+    const h = homographyFrom4(srcPts, cam.AI_TARGETS);
+    const hInv = homographyFrom4(cam.AI_TARGETS, srcPts);
+    // arbitrary image point: image -> board -> back to image
+    const p = [0.61, 0.42];
+    const board = projectPoint(h, ...p);
+    const back = projectPoint(hInv, ...board);
+    ok('hringferð skilar sama punkti', Math.hypot(back[0] - p[0], back[1] - p[1]) < 1e-6,
+      JSON.stringify(back));
+  }
+
   head('Myndavél: skáhornsmæling (tiltRatio)');
   const faceOn = [{ x: .5, y: .1 }, { x: .9, y: .5 }, { x: .5, y: .9 }, { x: .1, y: .5 }];
   ok('bein sýn ≈ 1', cam.tiltRatio(faceOn) === 1);
