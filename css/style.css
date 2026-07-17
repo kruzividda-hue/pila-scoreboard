@@ -207,6 +207,7 @@ body{
   box-shadow:0 2px 8px rgba(0,0,0,.5);
 }
 .cam-marker.cal{background:#38bdf8;border-color:#075985;color:#082f49}
+.cam-marker.dbg{background:#a78bfa;border-color:#4c1d95;color:#1e1b4b;min-width:24px;height:19px;font-size:9px;opacity:.92}
 .cam-chips{display:flex;gap:6px;justify-content:center;min-height:37px;padding:6px 0 2px}
 .cam-chips button{border:none;border-radius:9px;background:var(--card);color:var(--ink);padding:7px 10px;font-weight:800;box-shadow:var(--shadow)}
 .cam-actions{display:flex;gap:6px}

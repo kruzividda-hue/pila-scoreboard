@@ -58,10 +58,12 @@ let session = {
   aiCrop: null,    // zoom region around the found board (normalized square coords)
   aiIgnored: [],
   aiTracks: [],
+  aiLast: [],      // raw detections from the latest scan (for the debug view)
   aiFrame: 0,
   aiBusy: false,
   aiTimer: null,
   aiGeneration: 0,
+  debug: false,    // show raw detections with confidences
 };
 
 // Solve A*x=b with partial pivoting. Used by the 4-point homography.
@@ -139,6 +141,7 @@ function clearPhoto() {
   session.aiCrop = null;
   session.aiIgnored = [];
   session.aiTracks = [];
+  session.aiLast = [];
   session.aiFrame = 0;
   session.mode = 'camera';
 }
@@ -161,6 +164,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     <div class="cam-modes">
       <button data-mode="keypad" title="Talnaborð">⌨️</button>
       <button data-mode="board" title="Teiknað spjald">🎯</button>
+      <button data-mode="debug" title="Greiningarsýn">🐞</button>
       <span>AI keyrir í símanum · myndir fara ekki út</span>
     </div>`;
 
@@ -176,6 +180,12 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
 
   root.querySelector('[data-mode="keypad"]').onclick = () => { stopStream(); onKeypad(); };
   root.querySelector('[data-mode="board"]').onclick = () => { stopStream(); onBoard(); };
+  const dbgBtn = root.querySelector('[data-mode="debug"]');
+  dbgBtn.onclick = () => {
+    session.debug = !session.debug;
+    dbgBtn.style.background = session.debug ? 'var(--amber)' : '';
+    draw();
+  };
 
   async function startCamera() {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -299,6 +309,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
           .slice(0, 3).forEach(d => addAIDart(d, session.aiCalibration));
       }
       session.aiTracks = session.aiTracks.filter(t => session.aiFrame - t.lastFrame <= 4);
+      session.aiLast = detections;
       draw();
     } catch (err) {
       message.textContent = 'AI náði ekki að greina rammann — reyndu að halda spjaldinu öllu inni.';
@@ -447,6 +458,13 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     }
 
     let marks = '';
+    // debug view: every raw detection with class + confidence (P=píla, 1-4=kvörðun)
+    if (live && session.debug) {
+      for (const d of session.aiLast) {
+        const cls = ['P', '1', '2', '3', '4'][d.cls];
+        marks += marker(d.x, d.y, `${cls}${Math.round(d.confidence * 100)}`, 'dbg');
+      }
+    }
     session.calPoints.forEach((p, i) => { marks += marker(p.x, p.y, String(i + 1), 'cal'); });
     session.darts.forEach((p, i) => {
       const label = p.dart.num === 0 ? '0' : dartLabel(p.dart);
