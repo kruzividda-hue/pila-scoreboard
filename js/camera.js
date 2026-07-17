@@ -106,6 +106,15 @@ export function projectPoint(h, x, y) {
           (h[3] * x + h[4] * y + h[5]) / w];
 }
 
+// DeepDarts classes are dart(0), top(1), bottom(2), left(3), right(4).
+// Returns [top, right, bottom, left] to match AI_TARGETS, or null.
+function pickCal(detections) {
+  const byClass = cls => detections.filter(d => d.cls === cls)
+    .sort((a, b) => b.confidence - a.confidence)[0];
+  const cal = [byClass(1), byClass(4), byClass(2), byClass(3)];
+  return cal.every(Boolean) ? cal : null;
+}
+
 export function calibratedScore(calibration, width, height, x, y, targets = MANUAL_TARGETS) {
   const src = calibration.map(p => [p.x * width, p.y * height]);
   const [bx, by] = projectPoint(homographyFrom4(src, targets), x, y);
@@ -161,6 +170,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     </div>
     <div class="cam-chips"></div>
     <div class="cam-actions"></div>
+    <input type="file" accept="image/*" hidden>
     <div class="cam-modes">
       <button data-mode="keypad" title="Talnaborð">⌨️</button>
       <button data-mode="board" title="Teiknað spjald">🎯</button>
@@ -185,6 +195,12 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     session.debug = !session.debug;
     dbgBtn.style.background = session.debug ? 'var(--amber)' : '';
     draw();
+  };
+  const fileInput = root.querySelector('input[type="file"]');
+  fileInput.onchange = e => {
+    const f = e.target.files[0];
+    if (f) analyzePhoto(f);
+    e.target.value = '';
   };
 
   async function startCamera() {
@@ -282,12 +298,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
         x: region.x0 + d.x * region.s, y: region.y0 + d.y * region.s,
         w: d.w * region.s, h: d.h * region.s,
       }));
-      const byClass = cls => detections.filter(d => d.cls === cls)
-        .sort((a, b) => b.confidence - a.confidence)[0];
-      // DeepDarts classes are top, bottom, left, right. AI_TARGETS expects
-      // top, right, bottom, left.
-      const cal = [byClass(1), byClass(4), byClass(2), byClass(3)];
-      if (cal.every(Boolean)) {
+      const cal = pickCal(detections);
+      if (cal) {
         session.aiCalibration = cal.map(p => ({ x: p.x, y: p.y }));
         session.aiCalFrame = session.aiFrame;
         session.aiTilt = tiltRatio(session.aiCalibration);
@@ -333,6 +345,94 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
     }).then(() => scanFrame(generation)).catch(() => {
       message.textContent = 'Ekki tókst að hlaða AI-líkaninu.';
     });
+  }
+
+  // Run the full AI pipeline on a photo picked from the library: full-frame
+  // pass, then a zoomed pass around the found board (same as the live flow).
+  async function analyzePhoto(file) {
+    stopStream();
+    // img.decode() can hang forever on blob URLs in some engines; prefer
+    // createImageBitmap and fall back to <img> onload (handles HEIC on iOS)
+    let img;
+    try { img = await createImageBitmap(file); }
+    catch {
+      try {
+        img = await new Promise((resolve, reject) => {
+          const el = new Image();
+          const url = URL.createObjectURL(file);
+          el.onload = () => { URL.revokeObjectURL(url); resolve(el); };
+          el.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load failed')); };
+          el.src = url;
+        });
+      } catch { message.textContent = 'Gat ekki lesið myndina.'; return; }
+    }
+    const iw = img.naturalWidth ?? img.width, ih = img.naturalHeight ?? img.height;
+    const crop = Math.min(iw, ih);
+    const sx = (iw - crop) / 2, sy = (ih - crop) / 2;
+    session.width = session.height = Math.min(1280, crop);
+    canvas.width = canvas.height = session.width;
+    canvas.getContext('2d').drawImage(img, sx, sy, crop, crop, 0, 0, session.width, session.width);
+    img.close?.();
+    session.image = canvas.toDataURL('image/jpeg', .86);
+    session.darts = []; session.calPoints = [];
+    session.aiCalibration = null; session.aiLast = [];
+    session.mode = 'score';
+    message.innerHTML = '<b>AI greinir myndina…</b>';
+    draw();
+
+    try {
+      aiCanvas.width = aiCanvas.height = 800;
+      const ctx = aiCanvas.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(canvas, 0, 0, 800, 800);
+      let dets = await detectDarts(aiCanvas, p => {
+        message.innerHTML = `<b>AI hleðst…</b> ${Math.round(p * 100)}%`;
+      });
+      let cal = pickCal(dets);
+      if (cal) {
+        // zoomed second pass around the board
+        const cx = cal.reduce((a, p) => a + p.x, 0) / 4;
+        const cy = cal.reduce((a, p) => a + p.y, 0) / 4;
+        const r = Math.max(...cal.map(p => Math.hypot(p.x - cx, p.y - cy))) * 1.25;
+        const s = Math.min(1, Math.max(0.25, r * 2));
+        const x0 = Math.min(1 - s, Math.max(0, cx - s / 2));
+        const y0 = Math.min(1 - s, Math.max(0, cy - s / 2));
+        ctx.drawImage(canvas, x0 * session.width, y0 * session.width,
+          s * session.width, s * session.width, 0, 0, 800, 800);
+        const zoomed = (await detectDarts(aiCanvas)).map(d => ({
+          ...d, x: x0 + d.x * s, y: y0 + d.y * s, w: d.w * s, h: d.h * s,
+        }));
+        const cal2 = pickCal(zoomed);
+        if (cal2) { dets = zoomed; cal = cal2; }
+      }
+      session.aiLast = dets.map(d => ({ ...d, x: d.x * session.width, y: d.y * session.height }));
+      if (!cal) {
+        if (!session.calibration) session.mode = 'calibrate';
+        draw(); // then override the mode-default message
+        message.innerHTML = 'AI fann ekki spjaldið á myndinni — kvarðaðu og pikkaðu handvirkt.';
+        return;
+      }
+      session.aiCalibration = cal.map(p => ({ x: p.x, y: p.y }));
+      session.aiTilt = tiltRatio(session.aiCalibration);
+      for (const d of dets.filter(d => d.cls === 0)
+        .filter(d => !session.aiCalibration.some(p => Math.hypot(p.x - d.x, p.y - d.y) < 0.03))
+        .sort((a, b) => b.confidence - a.confidence).slice(0, 3)) {
+        try {
+          const result = calibratedScore(session.aiCalibration, 1, 1, d.x, d.y, AI_TARGETS);
+          if (result.dart.num === 0) continue;
+          session.darts.push({
+            x: d.x * session.width, y: d.y * session.height,
+            ...result, confidence: d.confidence, source: 'ai',
+          });
+        } catch { /* skip unprojectable detection */ }
+      }
+      draw(); // then override the mode-default message with the AI summary
+      const tiltNote = session.aiTilt < 0.82 ? ' · 📐 mikill skái, lestri varlega treystandi' : '';
+      message.innerHTML = `<b>AI sá ${session.darts.length} pílur</b>${tiltNote} — pikkaðu til að bæta við, × til að fjarlægja`;
+    } catch (err) {
+      console.warn('Photo analysis failed', err);
+      draw();
+      message.textContent = 'AI náði ekki að greina myndina.';
+    }
   }
 
   function takePhoto() {
@@ -396,8 +496,12 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
       }
     } else if (session.mode === 'score' && session.darts.length < 3) {
       try {
-        const result = calibratedScore(session.calibration, session.width, session.height, p.x, p.y);
-        session.darts.push({ ...p, dart: result.dart });
+        // prefer the AI-found calibration (photo analysis / captured after live
+        // lock); fall back to the user's manual 4-point calibration
+        const result = session.aiCalibration
+          ? calibratedScore(session.aiCalibration, session.width, session.height, p.x, p.y, AI_TARGETS)
+          : calibratedScore(session.calibration, session.width, session.height, p.x, p.y);
+        session.darts.push({ ...p, ...result, source: 'manual' });
       } catch {
         message.textContent = 'Kvörðunin er ógild — kvarðaðu spjaldið aftur.';
       }
@@ -459,7 +563,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
 
     let marks = '';
     // debug view: every raw detection with class + confidence (P=píla, 1-4=kvörðun)
-    if (live && session.debug) {
+    if ((live || session.image) && session.debug) {
       for (const d of session.aiLast) {
         const cls = ['P', '1', '2', '3', '4'][d.cls];
         marks += marker(d.x, d.y, `${cls}${Math.round(d.confidence * 100)}`, 'dbg');
@@ -490,7 +594,8 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
         <button data-act="capture">Mynd + pikk</button>
         <button class="cam-primary" data-act="confirm" ${session.darts.length ? '' : 'disabled'}>Staðfesta ✓</button>`;
     } else if (!session.image) {
-      actions.innerHTML = '<button class="cam-primary" data-act="open">Opna myndavél</button>';
+      actions.innerHTML = `<button class="cam-primary" data-act="open">Opna myndavél</button>
+        <button data-act="pick">Velja mynd</button>`;
     } else if (session.mode === 'calibrate') {
       actions.innerHTML = '<button data-act="undo-cal">⟲ Punktur</button><button data-act="retake">Ný mynd</button>';
     } else {
@@ -499,6 +604,7 @@ export function createCameraInput({ onTurn, onKeypad, onBoard }) {
         <button class="cam-primary" data-act="confirm" ${session.darts.length ? '' : 'disabled'}>Staðfesta kast ✓</button>`;
     }
     actions.querySelector('[data-act="open"]')?.addEventListener('click', startCamera);
+    actions.querySelector('[data-act="pick"]')?.addEventListener('click', () => fileInput.click());
     actions.querySelector('[data-act="capture"]')?.addEventListener('click', takePhoto);
     actions.querySelector('[data-act="reset-ai"]')?.addEventListener('click', () => {
       session.darts = []; session.aiCalibration = null; session.aiCalFrame = -99;
